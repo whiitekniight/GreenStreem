@@ -1,7 +1,8 @@
 {
-  "versionCode": 1,
-  "versionName": "1.0",
-  "apkUrl": "https://github.com/whiitekniight/GreenStreem/releases/download/v1.0/GreenStreem-v1.0.apk",
-  "notes": "Initial release"
+  "versionCode": 3,
+  "versionName": "1.2",
+  "apkUrl": "https://github.com/whiitekniight/GreenStreem/releases/download/v1.2/GreenStreem-v1.2.apk",
+  "notes": "UI and updater improvements"
 }
+
 
