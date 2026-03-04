@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="34dp"
+    android:background="#121212"
+    android:orientation="horizontal">
+
+    <!-- Left: Channel Info -->
+    <LinearLayout
+        android:id="@+id/channelInfoContainer"
+        android:layout_width="220dp"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="6dp"
+        android:paddingEnd="4dp"
+        android:focusable="false">
+
+        <ImageView
+            android:id="@+id/ivChannelLogo"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="3dp"
+            android:scaleType="centerInside"
+            tools:src="@android:drawable/ic_menu_report_image" />
+
+        <TextView
+            android:id="@+id/tvChannelName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            tools:text="Discovery Channel" />
+
+        <ImageView
+            android:id="@+id/ivVisibilityEye"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="2dp"
+            android:contentDescription="@null"
+            android:visibility="gone"
+            tools:src="@drawable/ic_visibility_on_eye" />
+
+        <ImageView
+            android:id="@+id/ivNowPlayingIndicator"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="2dp"
+            android:src="@drawable/ic_now_playing_triangle"
+            android:contentDescription="@null"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- Right: Programs (Horizontally Scrollable) -->
+    <HorizontalScrollView
+        android:id="@+id/hsvRow"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:overScrollMode="never"
+        android:scrollbars="none"
+        android:focusable="false">
+
+        <LinearLayout
+            android:id="@+id/programsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+</LinearLayout>
