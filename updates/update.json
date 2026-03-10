@@ -1,7 +1,8 @@
 {
-  "versionCode": 5,
-  "versionName": "1.5",
-  "apkUrl": "https://github.com/whiitekniight/GreenStreem/releases/download/v1.4/GreenStreem-v1.4-debug.apk",
-  "notes": "Faster EPG loading with persistent 24-hour cache and build naming updates"
+  "versionCode": 6,
+  "versionName": "1.6",
+  "apkUrl": "https://github.com/whiitekniight/GreenStreem/releases/download/v1.6/GreenStreem-v1.6.apk",
+  "notes": "Bug fixes and stability improvements"
 }
+
 
