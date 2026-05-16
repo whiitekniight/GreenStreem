@@ -2,11 +2,7 @@
   "versionCode": 25,
   "versionName": "1.7.9",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "EPG focused channel name turns theme color and scrolls/marquees.
-            Focused channel logo gets a theme-color outline.
-            Search keyboard Done/Next now submits and hides keyboard.
-            Firestick search channel results now use a full row so logos/items don’t overlap.
-            Movie/series poster sizing was left alone since phone looked good."
+  "notes": "EPG focused channel name turns theme color and scrolls/marquees."
 }
 
 
