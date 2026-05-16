@@ -1,7 +1,7 @@
 {
-  "versionCode": 32,
-  "versionName": "1.8.6",
+  "versionCode": 33,
+  "versionName": "1.8.7",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Fixes additional EPG sources being overwritten by playlist profile loading."
+  "notes": "Keeps Provider only and Custom XML EPG modes working when switching playlists."
 }
 
