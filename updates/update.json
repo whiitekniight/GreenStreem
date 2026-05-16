@@ -1,7 +1,7 @@
 {
-  "versionCode": 29,
-  "versionName": "1.8.3",
+  "versionCode": 30,
+  "versionName": "1.8.4",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Bumps the branded update build so existing installs can receive the fixed package cleanly."
+  "notes": "EPG focus highlight now follows the selected theme color, clears correctly while scrolling, and the timeline is more transparent."
 }
 
