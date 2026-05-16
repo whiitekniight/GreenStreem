@@ -1,6 +1,7 @@
 {
-  "versionCode": 28,
-  "versionName": "1.8.2",
+  "versionCode": 29,
+  "versionName": "1.8.3",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Search movie results now open movie actions first, softens the EPG time line, and fixes branded update installs."
+  "notes": "Bumps the branded update build so existing installs can receive the fixed package cleanly."
 }
+
