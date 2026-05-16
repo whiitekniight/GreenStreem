@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GreenStreem Labs</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08110d;
+      --panel: #101c16;
+      --text: #f3fff8;
+      --muted: #a8b7ae;
+      --green: #28d86b;
+      --green-dark: #129447;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
+      background: radial-gradient(circle at top, #143625 0, var(--bg) 46%);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 32px 18px;
+    }
+
+    main {
+      width: min(720px, 100%);
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid rgba(40, 216, 107, .28);
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, .35);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      letter-spacing: 0;
+    }
+
+    p {
+      color: var(--muted);
+      line-height: 1.55;
+      margin: 0 0 22px;
+      font-size: 1rem;
+    }
+
+    .download {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 22px;
+      border-radius: 8px;
+      background: linear-gradient(180deg, var(--green), var(--green-dark));
+      color: #041008;
+      font-weight: 700;
+      text-decoration: none;
+      margin: 8px 0 24px;
+    }
+
+    .note {
+      border-top: 1px solid rgba(255, 255, 255, .1);
+      padding-top: 18px;
+      margin-top: 8px;
+      font-size: .95rem;
+    }
+
+    .support {
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>GreenStreem Labs</h1>
+    <p>GreenStreem customer app download for Android TV and compatible Android devices.</p>
+    <a class="download" href="/downloads/greenstreem-customer.apk">Download GreenStreem APK</a>
+    <p class="note">After downloading, open the APK on your device and allow install from unknown sources if prompted.</p>
+    <p class="support">Support: support@greenstreemlabs.com</p>
+  </main>
+</body>
+</html>
