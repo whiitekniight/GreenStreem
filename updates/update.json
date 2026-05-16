@@ -1,8 +1,8 @@
 {
-  "versionCode": 25,
-  "versionName": "1.7.9",
+  "versionCode": 26,
+  "versionName": "1.8.0",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "EPG focused channel name turns theme color and scrolls/marquees."
+  "notes": "Improves phone landscape movie and series browsing with more poster room and a softer backdrop fade."
 }
 
 
