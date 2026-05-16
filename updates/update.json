@@ -1,7 +1,7 @@
 {
-  "versionCode": 31,
-  "versionName": "1.8.5",
+  "versionCode": 32,
+  "versionName": "1.8.6",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "EPG settings now clear stale guide data and reload cleanly when sources change."
+  "notes": "Fixes additional EPG sources being overwritten by playlist profile loading."
 }
 

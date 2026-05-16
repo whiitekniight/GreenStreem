@@ -1,6 +1,7 @@
 package com.example.greenstreem
 
 import android.content.Context
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
@@ -23,6 +24,7 @@ object PlaylistProfilesManager {
     private const val PREFS = "iptv_prefs"
     private const val KEY_PROFILES_JSON = "playlist_profiles_json"
     private const val KEY_ACTIVE_PROFILE_ID = "active_playlist_profile_id"
+    private const val TAG = "GreenStreemPlaylist"
     private val gson = Gson()
 
     fun loadProfiles(context: Context): MutableList<PlaylistProfile> {
@@ -109,26 +111,53 @@ object PlaylistProfilesManager {
         active.updateOnStart = prefs.getBoolean("playlist_update_on_start", active.updateOnStart)
         active.updateIntervalHours = prefs.getInt("playlist_update_interval_hours", active.updateIntervalHours)
         active.logoPriority = prefs.getInt("playlist_logo_priority", active.logoPriority)
-        active.secondaryEpgEnabled = prefs.getBoolean("secondary_epg_enabled", active.secondaryEpgEnabled)
-        active.secondaryEpgUrl = prefs.getString("secondary_epg_url", active.secondaryEpgUrl) ?: active.secondaryEpgUrl
         upsertProfileAndActivate(context, active)
     }
 
     fun applyProfileToLegacyKeys(context: Context, profile: PlaylistProfile) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val xtreamM3uCredentials = if (profile.username.isBlank() && profile.password.isBlank()) {
+            XtreamM3uUrl.parse(profile.serverUrl)
+        } else {
+            null
+        }
+        val effectiveServerUrl = xtreamM3uCredentials?.serverUrl ?: profile.serverUrl
+        val effectiveUsername = xtreamM3uCredentials?.username ?: profile.username
+        val effectivePassword = xtreamM3uCredentials?.password ?: profile.password
+        val isXtream = effectiveUsername.isNotBlank() && effectivePassword.isNotBlank()
+
+        if (xtreamM3uCredentials != null) {
+            Log.i(TAG, "promoting saved M3U profile to Xtream API mode host=${xtreamM3uCredentials.serverUrl}")
+            profile.serverUrl = effectiveServerUrl
+            profile.username = effectiveUsername
+            profile.password = effectivePassword
+            saveProfiles(context, loadProfiles(context).map {
+                if (it.id == profile.id) profile else it
+            })
+        }
+
+        val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString("playlist_name", profile.name)
-            .putString("server_url", profile.serverUrl)
-            .putString("username", profile.username)
-            .putString("password", profile.password)
+            .putString("server_url", effectiveServerUrl)
+            .putString("username", effectiveUsername)
+            .putString("password", effectivePassword)
             .putBoolean("has_playlist", true)
             .putBoolean("playlist_enabled", profile.enabled)
             .putBoolean("playlist_update_on_start", profile.updateOnStart)
             .putInt("playlist_update_interval_hours", profile.updateIntervalHours)
             .putInt("playlist_logo_priority", profile.logoPriority)
-            .putBoolean("secondary_epg_enabled", profile.secondaryEpgEnabled)
-            .putString("secondary_epg_url", profile.secondaryEpgUrl)
-            .apply()
+        if (isXtream) {
+            editor.putString("playlist_type", "xtream")
+                .remove("m3u_url")
+                .putString(
+                    "player_live_stream_format",
+                    if (xtreamM3uCredentials?.output.equals("m3u8", ignoreCase = true)) "hls" else "ts"
+                )
+        } else {
+            editor.putString("playlist_type", "m3u")
+                .putString("m3u_url", profile.serverUrl)
+        }
+        editor.apply()
         XtreamManager.initFromPrefs(context)
     }
 }
