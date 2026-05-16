@@ -1,7 +1,7 @@
 {
-  "versionCode": 22,
-  "versionName": "1.7.6",
+  "versionCode": 28,
+  "versionName": "1.8.2",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Keeps video playback awake on Fire TV devices so screensaver does not start while watching."
+  "notes": "Search movie results now open movie actions first, softens the EPG time line, and fixes branded update installs."
 }
 
