@@ -1,7 +1,7 @@
 {
-  "versionCode": 33,
-  "versionName": "1.8.7",
+  "versionCode": 34,
+  "versionName": "1.8.8",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Keeps Provider only and Custom XML EPG modes working when switching playlists."
+  "notes": "Fixes additional EPG source toggling and replaces the EPG now line with row progress shading."
 }
 
