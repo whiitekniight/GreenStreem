@@ -1,6 +1,6 @@
 {
-  "versionCode": 35,
-  "versionName": "1.8.9",
+  "versionCode": 36,
+  "versionName": "1.9.0",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
   "notes": "Improves movie and series poster browsing, title scrolling, focus borders, and grid performance."
 }
