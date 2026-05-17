@@ -1,7 +1,7 @@
 {
-  "versionCode": 34,
-  "versionName": "1.8.8",
+  "versionCode": 35,
+  "versionName": "1.8.9",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Fixes additional EPG source toggling and replaces the EPG now line with row progress shading."
+  "notes": "Fixes additional EPG source toggling so provider-only and custom XML modes apply immediately."
 }
 
