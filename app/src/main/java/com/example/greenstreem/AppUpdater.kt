@@ -33,12 +33,17 @@ object AppUpdater {
         "https://raw.githubusercontent.com/whiitekniight/GreenStreem/main/updates/update.json"
 
     suspend fun maybeAutoCheck(activity: FragmentActivity) {
+        if (BuildConfig.PLAY_STORE_BUILD) return
         val prefs = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_UPDATER_AUTO_CHECK, true)) return
         checkForUpdates(activity, manual = false)
     }
 
     suspend fun checkForUpdates(activity: FragmentActivity, manual: Boolean) {
+        if (BuildConfig.PLAY_STORE_BUILD) {
+            if (manual) Toast.makeText(activity, "Updates are handled by Google Play", Toast.LENGTH_SHORT).show()
+            return
+        }
         val feedUrl = DEFAULT_UPDATE_FEED_URL
         if (feedUrl.isBlank()) {
             if (manual) Toast.makeText(activity, "Update feed is unavailable", Toast.LENGTH_SHORT).show()

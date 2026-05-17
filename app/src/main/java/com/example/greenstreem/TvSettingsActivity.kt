@@ -28,7 +28,9 @@ class TvSettingsActivity : AppCompatActivity() {
                     startActivity(Intent(this, ChannelSortingModeActivity::class.java))
                 }
                 "Playback" -> {
-                    startActivity(Intent(this, PlaybackSettingsActivity::class.java))
+                    if (ProFeatureGate.require(this, "Playback settings are available in GreenStreem Pro.")) {
+                        startActivity(Intent(this, PlaybackSettingsActivity::class.java))
+                    }
                 }
                 "Groups" -> {
                     startActivity(Intent(this, ManageGroupsActivity::class.java))

@@ -14,9 +14,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ChannelOrder::class,
         GroupOrder::class,
         HiddenChannel::class,
-        EpgCacheEntry::class
+        EpgCacheEntry::class,
+        EpgChannelMapping::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,6 +27,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun groupOrderDao(): GroupOrderDao
     abstract fun hiddenChannelDao(): HiddenChannelDao
     abstract fun epgCacheDao(): EpgCacheDao
+    abstract fun epgChannelMappingDao(): EpgChannelMappingDao
 
     companion object {
         @Volatile
@@ -38,7 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "iptv_database"
                 )
-                .addMigrations(MIGRATION_5_6)
+                .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
@@ -55,6 +57,22 @@ abstract class AppDatabase : RoomDatabase() {
                         listingsJson TEXT NOT NULL,
                         updatedAtMs INTEGER NOT NULL,
                         PRIMARY KEY(streamId)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS epg_channel_mappings (
+                        channelId INTEGER NOT NULL,
+                        provider TEXT NOT NULL,
+                        epgChannelId TEXT NOT NULL,
+                        displayName TEXT NOT NULL,
+                        PRIMARY KEY(channelId)
                     )
                     """.trimIndent()
                 )

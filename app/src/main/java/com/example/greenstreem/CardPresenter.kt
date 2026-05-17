@@ -45,7 +45,7 @@ class CardPresenter : Presenter() {
         val cardView = viewHolder.view as ImageCardView
 
         Log.d(TAG, "onBindViewHolder")
-        cardView.titleText = channel.name
+        cardView.titleText = ChannelNameFormatter.format(viewHolder.view.context, channel.name)
         cardView.contentText = channel.group
         cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
         

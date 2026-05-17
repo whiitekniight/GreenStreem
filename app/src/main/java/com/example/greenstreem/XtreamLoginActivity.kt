@@ -28,20 +28,29 @@ class XtreamLoginActivity : AppCompatActivity() {
         val btnLogin = findViewById<Button>(R.id.btnLogin)
         val progressBar = findViewById<ProgressBar>(R.id.loginProgressBar)
         editingProfileId = intent.getStringExtra("edit_profile_id")
+        val brandedServerUrl = BuildConfig.BRANDED_SERVER_URL.trim()
+        if (BuildConfig.BRANDED_SERVER_LOCKED && brandedServerUrl.isNotBlank()) {
+            findViewById<View>(R.id.tvNameLabel).visibility = View.GONE
+            etName.visibility = View.GONE
+            findViewById<View>(R.id.tvServerLabel).visibility = View.GONE
+            etUrl.visibility = View.GONE
+            etName.setText("GreenStreem")
+            etUrl.setText(brandedServerUrl)
+        }
 
         if (editingProfileId != null) {
             val profile = PlaylistProfilesManager.loadProfiles(this).firstOrNull { it.id == editingProfileId }
             if (profile != null) {
                 etName.setText(profile.name)
-                etUrl.setText(profile.serverUrl)
+                etUrl.setText(if (BuildConfig.BRANDED_SERVER_LOCKED) brandedServerUrl else profile.serverUrl)
                 etUsername.setText(profile.username)
                 etPassword.setText(profile.password)
             }
         }
 
         btnLogin.setOnClickListener {
-            val name = etName.text.toString()
-            val url = etUrl.text.toString()
+            val name = etName.text.toString().ifBlank { "GreenStreem" }
+            val url = if (BuildConfig.BRANDED_SERVER_LOCKED) brandedServerUrl else etUrl.text.toString()
             val username = etUsername.text.toString()
             val password = etPassword.text.toString()
 
@@ -106,5 +115,16 @@ class XtreamLoginActivity : AppCompatActivity() {
         profile.username = user
         profile.password = pass
         PlaylistProfilesManager.upsertProfileAndActivate(this, profile)
+        getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putString("playlist_type", "xtream")
+            .remove("last_category_id_live")
+            .remove("last_category_pos_live")
+            .remove("last_category_id")
+            .remove("last_channel_id")
+            .remove("last_playback_channel_id")
+            .remove("last_playback_live_category_id")
+            .remove("m3u_url")
+            .apply()
     }
 }

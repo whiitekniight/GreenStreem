@@ -27,7 +27,19 @@ class PlaybackSettingsActivity : AppCompatActivity() {
         "10 seconds" to 10
     )
     private val decoderOptions = listOf("Auto", "Hardware", "Software")
+    private val moviePlayerOptions = listOf(
+        "Built-in player" to MOVIE_PLAYER_BUILT_IN,
+        "External player" to MOVIE_PLAYER_EXTERNAL
+    )
+    private val liveFormatOptions = listOf(
+        "TS" to LIVE_STREAM_FORMAT_TS,
+        "HLS" to LIVE_STREAM_FORMAT_HLS
+    )
     private val bufferOptions = listOf(
+        "Instant (0 sec)" to 0,
+        "Tiny (3 sec)" to 3,
+        "Low (5 sec)" to 5,
+        "Quick (10 sec)" to 10,
         "Small (15 sec)" to 15,
         "Normal (30 sec)" to 30,
         "Large (60 sec)" to 60,
@@ -45,6 +57,7 @@ class PlaybackSettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!ProFeatureGate.require(this, "Playback settings are available in GreenStreem Pro.")) return
         setContentView(R.layout.activity_playlist_settings)
 
         prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
@@ -61,8 +74,14 @@ class PlaybackSettingsActivity : AppCompatActivity() {
         val timeoutLabel = miniInfoOptions.firstOrNull { it.second == prefs.getInt(KEY_MINI_INFO_TIMEOUT_SEC, 4) }?.first ?: "4 seconds"
         val videoDecoderLabel = decoderOptions.getOrElse(prefs.getInt(KEY_VIDEO_DECODER, 0)) { "Auto" }
         val audioDecoderLabel = decoderOptions.getOrElse(prefs.getInt(KEY_AUDIO_DECODER, 0)) { "Auto" }
+        val moviePlayerLabel = moviePlayerOptions.firstOrNull {
+            it.second == prefs.getString(KEY_MOVIE_PLAYER_MODE, MOVIE_PLAYER_BUILT_IN)
+        }?.first ?: "Built-in player"
+        val liveFormatLabel = liveFormatOptions.firstOrNull {
+            it.second == prefs.getString(KEY_LIVE_STREAM_FORMAT, LIVE_STREAM_FORMAT_TS)
+        }?.first ?: "TS"
         val tunneledLabel = if (prefs.getBoolean(KEY_TUNNELED_PLAYBACK, false)) "On" else "Off"
-        val bufferLabel = bufferOptions.firstOrNull { it.second == prefs.getInt(KEY_BUFFER_SIZE_SEC, 30) }?.first ?: "Normal (30 sec)"
+        val bufferLabel = bufferOptions.firstOrNull { it.second == prefs.getInt(KEY_BUFFER_SIZE_SEC, 60) }?.first ?: "Large (60 sec)"
         val passthroughLabel = if (prefs.getBoolean(KEY_AUDIO_PASSTHROUGH, false)) "On" else "Off"
         val audioOffsetMs = prefs.getInt(KEY_AUDIO_OFFSET_MS, 0)
         val audioOffsetLabel = audioOffsetOptions.firstOrNull { it.second == audioOffsetMs }?.first ?: "$audioOffsetMs ms"
@@ -70,6 +89,8 @@ class PlaybackSettingsActivity : AppCompatActivity() {
         val options = listOf(
             "Video decoder: $videoDecoderLabel",
             "Audio decoder: $audioDecoderLabel",
+            "Movie player: $moviePlayerLabel",
+            "Live stream format: $liveFormatLabel",
             "Tunneled playback: $tunneledLabel",
             "Buffer size: $bufferLabel",
             "Audio passthrough: $passthroughLabel",
@@ -83,6 +104,8 @@ class PlaybackSettingsActivity : AppCompatActivity() {
             when {
                 selection.startsWith("Video decoder") -> showDecoderDialog("Video decoder", KEY_VIDEO_DECODER)
                 selection.startsWith("Audio decoder") -> showDecoderDialog("Audio decoder", KEY_AUDIO_DECODER)
+                selection.startsWith("Movie player") -> showStringChoiceDialog("Movie player", KEY_MOVIE_PLAYER_MODE, moviePlayerOptions, MOVIE_PLAYER_BUILT_IN)
+                selection.startsWith("Live stream format") -> showStringChoiceDialog("Live stream format", KEY_LIVE_STREAM_FORMAT, liveFormatOptions, LIVE_STREAM_FORMAT_TS)
                 selection.startsWith("Tunneled playback") -> toggleBoolean(KEY_TUNNELED_PLAYBACK, false)
                 selection.startsWith("Buffer size") -> showBufferDialog()
                 selection.startsWith("Audio passthrough") -> toggleBoolean(KEY_AUDIO_PASSTHROUGH, false)
@@ -112,8 +135,26 @@ class PlaybackSettingsActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun showStringChoiceDialog(
+        title: String,
+        key: String,
+        options: List<Pair<String, String>>,
+        defaultValue: String
+    ) {
+        val current = prefs.getString(key, defaultValue) ?: defaultValue
+        val currentIndex = options.indexOfFirst { it.second == current }.coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setSingleChoiceItems(options.map { it.first }.toTypedArray(), currentIndex) { dialog, which ->
+                prefs.edit().putString(key, options[which].second).apply()
+                dialog.dismiss()
+                renderOptions()
+            }
+            .show()
+    }
+
     private fun showBufferDialog() {
-        val current = prefs.getInt(KEY_BUFFER_SIZE_SEC, 30)
+        val current = prefs.getInt(KEY_BUFFER_SIZE_SEC, 60)
         val currentIndex = bufferOptions.indexOfFirst { it.second == current }.coerceAtLeast(0)
         AlertDialog.Builder(this)
             .setTitle("Buffer size")
@@ -170,6 +211,12 @@ class PlaybackSettingsActivity : AppCompatActivity() {
         const val KEY_MINI_INFO_TIMEOUT_SEC = "mini_info_timeout_sec"
         const val KEY_VIDEO_DECODER = "player_video_decoder"
         const val KEY_AUDIO_DECODER = "player_audio_decoder"
+        const val KEY_MOVIE_PLAYER_MODE = "player_movie_player_mode"
+        const val MOVIE_PLAYER_BUILT_IN = "built_in"
+        const val MOVIE_PLAYER_EXTERNAL = "external"
+        const val KEY_LIVE_STREAM_FORMAT = "player_live_stream_format"
+        const val LIVE_STREAM_FORMAT_TS = "ts"
+        const val LIVE_STREAM_FORMAT_HLS = "hls"
         const val KEY_TUNNELED_PLAYBACK = "player_tunneled_playback"
         const val KEY_BUFFER_SIZE_SEC = "player_buffer_size_sec"
         const val KEY_AUDIO_PASSTHROUGH = "player_audio_passthrough"

@@ -26,18 +26,16 @@ class PlaylistManagerActivity : AppCompatActivity() {
 
     private fun render() {
         val profiles = PlaylistProfilesManager.loadProfiles(this)
-        val activeId = PlaylistProfilesManager.getActiveProfileId(this)
 
         val labels = mutableListOf("Add playlist")
         labels += profiles.map { profile ->
-            val active = if (profile.id == activeId) " (Active)" else ""
             val enabled = if (profile.enabled) "" else " [Disabled]"
-            "${profile.name}$active$enabled"
+            "${profile.name}$enabled"
         }
 
         rvOptions.adapter = SimpleSettingsAdapter(labels) { selection ->
             if (selection == "Add playlist") {
-                startActivity(Intent(this, XtreamLoginActivity::class.java))
+                startActivity(Intent(this, SetupActivity::class.java))
                 return@SimpleSettingsAdapter
             }
             val profile = profiles.firstOrNull { selection.startsWith(it.name) }
@@ -46,23 +44,18 @@ class PlaylistManagerActivity : AppCompatActivity() {
     }
 
     private fun showProfileActions(profile: PlaylistProfile) {
-        val options = arrayOf("Set active", "Edit credentials", "Delete playlist")
+        val options = arrayOf("Edit credentials", "Delete playlist")
         AlertDialog.Builder(this)
             .setTitle(profile.name)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
-                        PlaylistProfilesManager.setActiveProfile(this, profile.id)
-                        Toast.makeText(this, "Active playlist switched", Toast.LENGTH_SHORT).show()
-                        render()
-                    }
-                    1 -> {
                         startActivity(
                             Intent(this, XtreamLoginActivity::class.java)
                                 .putExtra("edit_profile_id", profile.id)
                         )
                     }
-                    2 -> confirmDelete(profile)
+                    1 -> confirmDelete(profile)
                 }
             }
             .show()

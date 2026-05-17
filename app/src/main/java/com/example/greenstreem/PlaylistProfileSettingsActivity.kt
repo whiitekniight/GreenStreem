@@ -29,10 +29,14 @@ class PlaylistProfileSettingsActivity : AppCompatActivity() {
     private fun render() {
         val interval = prefs.getInt(KEY_PLAYLIST_UPDATE_INTERVAL_HOURS, 12)
         val logoPriority = prefs.getInt(KEY_PLAYLIST_LOGO_PRIORITY, 0).coerceIn(logoPriorityOptions.indices)
-        val rows = listOf(
+        val rows = mutableListOf(
             "Enable playlist: ${onOff(prefs.getBoolean(KEY_PLAYLIST_ENABLED, true))}",
-            "Playlist name: ${prefs.getString("playlist_name", "Playlist") ?: "Playlist"}",
-            "Server URL: ${prefs.getString("server_url", "") ?: ""}",
+            "Playlist name: ${prefs.getString("playlist_name", "Playlist") ?: "Playlist"}"
+        )
+        if (!BuildConfig.BRANDED_SERVER_LOCKED) {
+            rows += "Server URL: ${prefs.getString("server_url", "") ?: ""}"
+        }
+        rows += listOf(
             "Username: ${prefs.getString("username", "") ?: ""}",
             "Password: ${mask(prefs.getString("password", "") ?: "")}",
             "Update on app start: ${onOff(prefs.getBoolean(KEY_PLAYLIST_UPDATE_ON_START, true))}",

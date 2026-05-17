@@ -6,6 +6,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -28,7 +32,11 @@ class AdvancedSettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_playlist_settings)
 
         prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+        PlayBillingManager.start(this)
         section = Section.from(intent.getStringExtra(EXTRA_SECTION))
+        if (!section.isFree && !ProFeatureGate.require(this, "${section.title} are available in GreenStreem Pro.")) {
+            return
+        }
         specs = buildSpecs(section)
 
         findViewById<TextView>(R.id.tvPlaylistSettingsTitle)?.text = section.title
@@ -40,12 +48,22 @@ class AdvancedSettingsActivity : AppCompatActivity() {
     private fun render() {
         val labels = specs.map { spec ->
             when (spec) {
+                is Spec.ProInfo -> spec.title
                 is Spec.Toggle -> "${spec.title}: ${if (prefs.getBoolean(spec.key, spec.default)) "On" else "Off"}"
                 is Spec.Choice -> "${spec.title}: ${spec.options[prefs.getInt(spec.key, spec.defaultIndex).coerceIn(spec.options.indices)]}"
                 is Spec.Action -> when (spec.actionKey) {
                     "secondary_epg_url" -> {
-                        val url = prefs.getString("secondary_epg_url", "")?.trim().orEmpty()
-                        if (url.isBlank()) "${spec.title}: Not set" else "${spec.title}: Set"
+                        val urls = getSecondaryEpgUrls()
+                        if (urls.isEmpty()) "${spec.title}: Not set" else "${spec.title}: ${urls.size} set"
+                    }
+                    "channel_prefix_cleanup" -> {
+                        val mode = when (prefs.getInt(ChannelNameFormatter.KEY_PREFIX_MODE, ChannelNameFormatter.MODE_OFF)) {
+                            ChannelNameFormatter.MODE_REMOVE -> "Remove"
+                            ChannelNameFormatter.MODE_ADD -> "Add"
+                            else -> "Off"
+                        }
+                        val prefixes = prefs.getString(ChannelNameFormatter.KEY_PREFIX_VALUES, "")?.trim().orEmpty()
+                        if (prefixes.isBlank()) "${spec.title}: $mode, no prefixes" else "${spec.title}: $mode ($prefixes)"
                     }
                     else -> spec.title
                 }
@@ -55,9 +73,11 @@ class AdvancedSettingsActivity : AppCompatActivity() {
             val idx = labels.indexOf(selection)
             if (idx == -1) return@SimpleSettingsAdapter
             when (val spec = specs[idx]) {
+                is Spec.ProInfo -> showProDialog()
                 is Spec.Toggle -> {
                     val next = !prefs.getBoolean(spec.key, spec.default)
-                    prefs.edit().putBoolean(spec.key, next).apply()
+                    prefs.edit().putBoolean(spec.key, next).commit()
+                    syncActivePlaylistIfEpgSetting(spec.key)
                     render()
                 }
                 is Spec.Choice -> showChoiceDialog(spec)
@@ -71,11 +91,27 @@ class AdvancedSettingsActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(spec.title)
             .setSingleChoiceItems(spec.options.toTypedArray(), current) { dialog, which ->
-                prefs.edit().putInt(spec.key, which).apply()
+                prefs.edit().putInt(spec.key, which).commit()
+                syncActivePlaylistIfEpgSetting(spec.key)
                 dialog.dismiss()
                 render()
             }
             .show()
+    }
+
+    private fun syncActivePlaylistIfEpgSetting(key: String) {
+        if (key == "secondary_epg_enabled" || key == "secondary_epg_mode") {
+            markEpgDataStale()
+            PlaylistProfilesManager.syncLegacyKeysToActive(this)
+        }
+    }
+
+    private fun markEpgDataStale() {
+        prefs.edit()
+            .putBoolean("epg_clear_requested", true)
+            .putBoolean("epg_force_refresh_now", true)
+            .remove("epg_settings_signature")
+            .commit()
     }
 
     private fun runAction(spec: Spec.Action) {
@@ -90,6 +126,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, "Playback history cleared", Toast.LENGTH_SHORT).show()
             }
             "secondary_epg_url" -> showSecondaryEpgUrlDialog()
+            "channel_prefix_cleanup" -> showChannelPrefixDialog()
             "update_epg_now" -> {
                 prefs.edit().putBoolean("epg_force_refresh_now", true).apply()
                 Toast.makeText(this, "EPG update requested", Toast.LENGTH_SHORT).show()
@@ -129,6 +166,15 @@ class AdvancedSettingsActivity : AppCompatActivity() {
             "app_version" -> showAppVersion()
             else -> Toast.makeText(this, "Action not implemented yet", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun showProDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("GreenStreem Pro")
+            .setMessage("Advanced EPG controls are available in GreenStreem Pro.")
+            .setPositiveButton("Unlock Pro") { _, _ -> PlayBillingManager.launchProUnlock(this) }
+            .setNegativeButton("Not now", null)
+            .show()
     }
 
     private fun showSetParentalPinDialog() {
@@ -228,23 +274,128 @@ class AdvancedSettingsActivity : AppCompatActivity() {
 
     private fun showSecondaryEpgUrlDialog() {
         val input = EditText(this).apply {
-            hint = "https://example.com/epg.xml or .xml.gz"
-            setSingleLine(true)
-            setText(prefs.getString("secondary_epg_url", "") ?: "")
+            hint = "One XMLTV URL per line\nhttps://example.com/epg.xml\nhttps://example.com/epg2.xml.gz"
+            setSingleLine(false)
+            minLines = 5
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setText(getSecondaryEpgUrls().joinToString("\n"))
         }
         AlertDialog.Builder(this)
-            .setTitle("Secondary EPG URL")
+            .setTitle("Additional EPG sources")
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
-                val value = input.text?.toString()?.trim().orEmpty()
-                prefs.edit().putString("secondary_epg_url", value).apply()
-                Toast.makeText(this, "Secondary EPG URL saved", Toast.LENGTH_SHORT).show()
+                val urls = input.text?.toString()
+                    ?.lines()
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
+                    ?.distinct()
+                    .orEmpty()
+                prefs.edit()
+                    .putString("secondary_epg_urls", urls.joinToString("\n"))
+                    .putString("secondary_epg_url", urls.firstOrNull().orEmpty())
+                    .commit()
+                markEpgDataStale()
+                PlaylistProfilesManager.syncLegacyKeysToActive(this)
+                Toast.makeText(this, "${urls.size} additional EPG source(s) saved", Toast.LENGTH_SHORT).show()
                 render()
             }
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Clear") { _, _ ->
-                prefs.edit().remove("secondary_epg_url").apply()
-                Toast.makeText(this, "Secondary EPG URL cleared", Toast.LENGTH_SHORT).show()
+                prefs.edit()
+                    .remove("secondary_epg_urls")
+                    .remove("secondary_epg_url")
+                    .commit()
+                markEpgDataStale()
+                PlaylistProfilesManager.syncLegacyKeysToActive(this)
+                Toast.makeText(this, "Additional EPG sources cleared", Toast.LENGTH_SHORT).show()
+                render()
+            }
+            .show()
+    }
+
+    private fun getSecondaryEpgUrls(): List<String> {
+        val saved = prefs.getString("secondary_epg_urls", null)
+            ?.lines()
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
+        val legacy = prefs.getString("secondary_epg_url", null)?.trim().orEmpty()
+        return (saved + legacy)
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private fun showChannelPrefixDialog() {
+        val currentMode = prefs.getInt(ChannelNameFormatter.KEY_PREFIX_MODE, ChannelNameFormatter.MODE_OFF)
+        val input = EditText(this).apply {
+            hint = "US, UK, CA"
+            setSingleLine(true)
+            setText(prefs.getString(ChannelNameFormatter.KEY_PREFIX_VALUES, "") ?: "")
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val modeGroup = RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+        }
+        val offButton = RadioButton(this).apply {
+            id = ChannelNameFormatter.MODE_OFF
+            text = "Off"
+        }
+        val removeButton = RadioButton(this).apply {
+            id = ChannelNameFormatter.MODE_REMOVE
+            text = "Remove prefix from channel names"
+        }
+        val addButton = RadioButton(this).apply {
+            id = ChannelNameFormatter.MODE_ADD
+            text = "Add first prefix to channel names"
+        }
+        modeGroup.addView(offButton)
+        modeGroup.addView(removeButton)
+        modeGroup.addView(addButton)
+        modeGroup.check(currentMode)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 16, 32, 0)
+            addView(TextView(this@AdvancedSettingsActivity).apply {
+                text = "Example: type US, UK then choose Remove to show US A&E as A&E."
+                setTextColor(android.graphics.Color.WHITE)
+                setPadding(0, 0, 0, 16)
+            })
+            addView(TextView(this@AdvancedSettingsActivity).apply {
+                text = "Prefixes"
+                setTextColor(android.graphics.Color.WHITE)
+            })
+            addView(input)
+            addView(TextView(this@AdvancedSettingsActivity).apply {
+                text = "Action"
+                setTextColor(android.graphics.Color.WHITE)
+                setPadding(0, 24, 0, 0)
+            })
+            addView(modeGroup)
+        }
+        val scroller = ScrollView(this).apply {
+            addView(content)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (resources.displayMetrics.heightPixels * 0.55f).toInt()
+            )
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Channel prefix cleanup")
+            .setView(scroller)
+            .setPositiveButton("Save") { _, _ ->
+                val value = input.text?.toString()?.trim().orEmpty()
+                prefs.edit()
+                    .putString(ChannelNameFormatter.KEY_PREFIX_VALUES, value)
+                    .putInt(ChannelNameFormatter.KEY_PREFIX_MODE, modeGroup.checkedRadioButtonId)
+                    .apply()
+                Toast.makeText(this, "Channel prefix cleanup saved", Toast.LENGTH_SHORT).show()
+                render()
+            }
+            .setNegativeButton("Cancel", null)
+            .setNeutralButton("Clear") { _, _ ->
+                prefs.edit().remove(ChannelNameFormatter.KEY_PREFIX_VALUES).apply()
+                prefs.edit().putInt(ChannelNameFormatter.KEY_PREFIX_MODE, ChannelNameFormatter.MODE_OFF).apply()
+                Toast.makeText(this, "Channel prefixes cleared", Toast.LENGTH_SHORT).show()
                 render()
             }
             .show()
@@ -264,7 +415,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
                 Spec.Toggle("general_resume_last_channel", "Resume last channel", true),
                 Spec.Toggle("general_show_channel_numbers", "Show channel numbers", true)
             )
-            Section.EPG -> listOf(
+            Section.EPG -> gateProEpgSpecs(listOf(
                 Spec.Toggle("epg_auto_update", "Auto update EPG", true),
                 Spec.Toggle("epg_update_on_start", "Update EPG on app start", true),
                 Spec.Choice("epg_update_interval", "EPG update interval", listOf("2 hours", "6 hours", "12 hours", "24 hours"), 2),
@@ -273,20 +424,21 @@ class AdvancedSettingsActivity : AppCompatActivity() {
                 Spec.Toggle("epg_prefer_logos", "Prefer logos from EPG", false),
                 Spec.Toggle("epg_show_past_no_catchup", "Show past programs without catch-up", true),
                 Spec.Toggle("epg_catchup_icon", "Show catch-up icon in channels list", true),
-                Spec.Toggle("epg_show_now_line", "Show now-time line", true),
                 Spec.Toggle("epg_color_by_progress", "Color current progress", true),
                 Spec.Toggle("epg_click_to_play", "Guide click starts playback", true),
                 Spec.Action("Update EPG now", "update_epg_now"),
                 Spec.Action("Clear EPG", "clear_epg"),
-                Spec.Toggle("secondary_epg_enabled", "Use secondary EPG fallback", false),
-                Spec.Action("Secondary EPG URL", "secondary_epg_url")
-            )
+                Spec.Toggle("secondary_epg_enabled", "Use additional EPG sources", false),
+                Spec.Choice("secondary_epg_mode", "EPG source priority", listOf("Fill missing only", "Custom XML first", "Custom XML only", "Provider only"), 0),
+                Spec.Action("Additional EPG sources", "secondary_epg_url")
+            ))
             Section.APPEARANCE -> listOf(
                 Spec.Choice("appearance_theme", "Theme", listOf("Dark", "Light", "System"), 0),
                 Spec.Choice("appearance_logo_size", "Channel logo size", listOf("Small", "Medium", "Large"), 1),
                 Spec.Choice("appearance_list_density", "List density", listOf("Compact", "Comfortable", "Large"), 1),
                 Spec.Choice("appearance_accent", "Accent color", listOf("Green", "Blue", "Orange"), 0),
                 Spec.Choice("appearance_ui_transparency", "User interface transparency", listOf("0%", "20%", "40%", "60%", "80%"), 1),
+                Spec.Action("Channel prefix cleanup", "channel_prefix_cleanup"),
                 Spec.Toggle("appearance_show_logos", "Show channel logos", true),
                 Spec.Toggle("appearance_show_video_resolution", "Show video resolution instead of labels", false),
                 Spec.Toggle("appearance_enable_animations", "Enable UI animations", true)
@@ -314,14 +466,35 @@ class AdvancedSettingsActivity : AppCompatActivity() {
                 Spec.Toggle("updater_auto_check", "Auto check app updates", true),
                 Spec.Action("Check for app updates now", "check_app_updates"),
                 Spec.Action("Backup & Restore", "open_backup_restore")
-            )
+            ).filterNot {
+                BuildConfig.PLAY_STORE_BUILD &&
+                    ((it as? Spec.Toggle)?.key == "updater_auto_check" ||
+                        (it as? Spec.Action)?.actionKey == "check_app_updates")
+            }
             Section.ABOUT -> listOf(
                 Spec.Action("App version", "app_version")
             )
         }
     }
 
+    private fun gateProEpgSpecs(epgSpecs: List<Spec>): List<Spec> {
+        if (ProEntitlement.isProUnlocked(this)) return epgSpecs
+        val freeKeys = setOf("epg_update_on_start", "epg_click_to_play")
+        return buildList {
+            add(Spec.ProInfo("GreenStreem Pro unlocks advanced EPG controls"))
+            addAll(epgSpecs.filter { spec ->
+                when (spec) {
+                    is Spec.Toggle -> spec.key in freeKeys
+                    is Spec.Choice -> false
+                    is Spec.Action -> false
+                    is Spec.ProInfo -> true
+                }
+            })
+        }
+    }
+
     sealed class Spec {
+        data class ProInfo(val title: String) : Spec()
         data class Toggle(val key: String, val title: String, val default: Boolean) : Spec()
         data class Choice(val key: String, val title: String, val options: List<String>, val defaultIndex: Int) : Spec()
         data class Action(val title: String, val actionKey: String) : Spec()
@@ -335,6 +508,9 @@ class AdvancedSettingsActivity : AppCompatActivity() {
         PARENTAL_CONTROL("parental", "Parental Control Settings"),
         OTHER("other", "Other Settings"),
         ABOUT("about", "About");
+
+        val isFree: Boolean
+            get() = this == ABOUT
 
         companion object {
             fun from(raw: String?): Section = entries.firstOrNull { it.id == raw } ?: GENERAL

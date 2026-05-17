@@ -20,15 +20,17 @@ class PlaylistSettingsActivity : AppCompatActivity() {
         rvOptions.layoutManager = LinearLayoutManager(this)
 
         val options = listOf(
+            "Add playlist",
             "Manage playlists",
             "Current playlist settings",
-            "Update all playlists",
-            "M3U Playlists",
-            "Xtream Codes API"
+            "Update all playlists"
         )
 
         rvOptions.adapter = SimpleSettingsAdapter(options) { selection ->
             when (selection) {
+                "Add playlist" -> {
+                    startActivity(Intent(this, SetupActivity::class.java))
+                }
                 "Manage playlists" -> {
                     startActivity(Intent(this, PlaylistManagerActivity::class.java))
                 }
@@ -37,12 +39,6 @@ class PlaylistSettingsActivity : AppCompatActivity() {
                 }
                 "Update all playlists" -> {
                     updateAllPlaylistsNow()
-                }
-                "Xtream Codes API" -> {
-                    startActivity(Intent(this, XtreamLoginActivity::class.java))
-                }
-                "M3U Playlists" -> {
-                    startActivity(Intent(this, SetupActivity::class.java))
                 }
             }
         }

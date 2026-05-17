@@ -31,6 +31,7 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/tvNameLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Playlist Name"
@@ -48,6 +49,7 @@
                 android:backgroundTint="@android:color/darker_gray" />
 
             <TextView
+                android:id="@+id/tvServerLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"

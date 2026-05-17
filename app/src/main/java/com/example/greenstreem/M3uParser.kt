@@ -3,6 +3,7 @@ package com.example.greenstreem
 import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader
+import java.util.Locale
 
 /**
  * A simple parser for M3U playlists.
@@ -41,14 +42,14 @@ object M3uParser {
                     } else {
                         "Unknown"
                     }
-                } else if (line!!.startsWith("http") || line!!.startsWith("rtmp") || line!!.startsWith("rtsp")) {
+                } else if (isStreamUrl(line!!)) {
                     // Stream URL
                     val streamUrl = line!!.trim()
                     channels.add(
                         Channel(
-                            id = channels.size.toLong(),
+                            id = stableIdForUrl(streamUrl),
                             name = currentChannelName,
-                            group = currentGroup,
+                            group = cleanGroupName(currentGroup),
                             logoUrl = currentLogo,
                             streamUrl = streamUrl,
                             epgId = currentEpgId,
@@ -68,6 +69,26 @@ object M3uParser {
             reader.close()
         }
         return channels
+    }
+
+    private fun isStreamUrl(line: String): Boolean {
+        val normalized = line.trim().lowercase(Locale.getDefault())
+        return normalized.startsWith("http://") ||
+            normalized.startsWith("https://") ||
+            normalized.startsWith("rtmp://") ||
+            normalized.startsWith("rtsp://") ||
+            normalized.startsWith("udp://")
+    }
+
+    private fun stableIdForUrl(url: String): Long {
+        return (url.hashCode().toLong() and 0x7fffffffL) + 1L
+    }
+
+    private fun cleanGroupName(group: String): String {
+        return group
+            .replace(Regex("""^\s*(live|movie|movies|vod|series|tv)\s*[:|\-/]+\s*""", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .ifBlank { "Default" }
     }
 
     private fun parseAttribute(line: String, attribute: String): String {

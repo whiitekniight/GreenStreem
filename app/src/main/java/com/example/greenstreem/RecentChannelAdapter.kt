@@ -31,13 +31,31 @@ class RecentChannelAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
-        holder.tvName.text = item.name
+        holder.tvName.text = ChannelNameFormatter.format(holder.itemView.context, item.name)
         Glide.with(holder.itemView.context)
             .load(item.logoUrl)
             .placeholder(android.R.drawable.ic_menu_report_image)
             .error(android.R.drawable.ic_menu_report_image)
             .into(holder.ivLogo)
+        holder.itemView.isFocusable = true
         holder.itemView.setOnClickListener { onClick(item) }
+        holder.itemView.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                holder.itemView.animate()
+                    .scaleX(1.08f)
+                    .scaleY(1.08f)
+                    .translationZ(4f)
+                    .setDuration(150)
+                    .start()
+            } else {
+                holder.itemView.animate()
+                    .scaleX(1.0f)
+                    .scaleY(1.0f)
+                    .translationZ(0f)
+                    .setDuration(150)
+                    .start()
+            }
+        }
     }
 
     override fun getItemCount(): Int = items.size

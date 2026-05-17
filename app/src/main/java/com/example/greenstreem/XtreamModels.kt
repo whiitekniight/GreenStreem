@@ -24,9 +24,9 @@ data class XtreamServerInfo(
 )
 
 data class XtreamCategory(
-    @SerializedName("category_id") val id: String,
-    @SerializedName("category_name") val name: String,
-    @SerializedName("parent_id") val parentId: Int
+    @SerializedName(value = "category_id", alternate = ["id", "cat_id", "group_id"]) val id: String,
+    @SerializedName(value = "category_name", alternate = ["name", "title", "group", "group_title"]) val name: String,
+    @SerializedName(value = "parent_id", alternate = ["parent", "parentid"]) val parentId: Int = 0
 )
 
 data class XtreamLiveStream(
@@ -36,7 +36,7 @@ data class XtreamLiveStream(
     @SerializedName("stream_id") val streamId: Int,
     @SerializedName("stream_icon") val streamIcon: String?,
     @SerializedName("epg_channel_id") val epgId: String?,
-    @SerializedName("category_id") val categoryId: String?,
+    @SerializedName(value = "category_id", alternate = ["category", "categoryId", "cat_id", "group_id", "category_name", "group"]) val categoryId: String?,
     @SerializedName(value = "tv_archive", alternate = ["catchup", "has_archive"]) val tvArchive: String? = null,
     @SerializedName(value = "tv_archive_duration", alternate = ["archive_duration"]) val tvArchiveDuration: String? = null
 )
@@ -46,8 +46,9 @@ data class XtreamVodStream(
     @SerializedName("name") val name: String,
     @SerializedName("stream_id") val streamId: Int,
     @SerializedName("stream_icon") val streamIcon: String?,
-    @SerializedName("category_id") val categoryId: String?,
-    @SerializedName("container_extension") val containerExtension: String?
+    @SerializedName(value = "category_id", alternate = ["category", "categoryId", "cat_id", "group_id", "category_name", "group"]) val categoryId: String?,
+    @SerializedName("container_extension") val containerExtension: String?,
+    val directUrl: String? = null
 )
 
 data class XtreamVodInfoResponse(
@@ -59,7 +60,9 @@ data class XtreamVodDetailsInfo(
     @SerializedName("name") val name: String?,
     @SerializedName("plot") val plot: String?,
     @SerializedName("movie_image") val movieIcon: String?,
+    @SerializedName(value = "backdrop_path", alternate = ["backdrop", "background", "cover_big"]) val backdropPath: Any?,
     @SerializedName("director") val director: String?,
+    @SerializedName(value = "cast", alternate = ["actors"]) val cast: String?,
     @SerializedName("genre") val genre: String?,
     @SerializedName("releasedate") val releaseDate: String?, // Changed from releaseDate to releasedate
     @SerializedName("rating") val rating: String?,
@@ -76,7 +79,7 @@ data class XtreamSeries(
     @SerializedName("name") val name: String,
     @SerializedName("series_id") val seriesId: Int,
     @SerializedName("cover") val cover: String?,
-    @SerializedName("category_id") val categoryId: String?
+    @SerializedName(value = "category_id", alternate = ["category", "categoryId", "cat_id", "group_id", "category_name", "group"]) val categoryId: String?
 )
 
 data class XtreamSeriesInfoResponse(
@@ -105,7 +108,9 @@ data class XtreamSeriesDetailsInfo(
     @SerializedName("name") val name: String?,
     @SerializedName("plot") val plot: String?,
     @SerializedName("cover") val cover: String?,
+    @SerializedName(value = "backdrop_path", alternate = ["backdrop", "background", "cover_big"]) val backdropPath: Any?,
     @SerializedName("director") val director: String?,
+    @SerializedName(value = "cast", alternate = ["actors"]) val cast: String?,
     @SerializedName("genre") val genre: String?,
     @SerializedName("releaseDate") val releaseDate: String?,
     @SerializedName("rating") val rating: String?

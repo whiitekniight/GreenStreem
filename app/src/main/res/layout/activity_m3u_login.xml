@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:fillViewport="true">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="32dp">
+
+        <TextView
+            android:id="@+id/tvM3uTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="M3U Playlist"
+            android:textColor="@android:color/white"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/tvM3uSubtitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Paste your M3U or M3U8 playlist URL to start watching live TV."
+            android:textColor="@android:color/darker_gray"
+            android:textSize="16sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvM3uTitle" />
+
+        <EditText
+            android:id="@+id/etM3uName"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="32dp"
+            android:hint="Playlist name, optional"
+            android:inputType="text"
+            android:singleLine="true"
+            android:textColor="@android:color/white"
+            android:textColorHint="#777777"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvM3uSubtitle" />
+
+        <EditText
+            android:id="@+id/etM3uUrl"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="18dp"
+            android:hint="https://example.com/playlist.m3u"
+            android:inputType="textUri"
+            android:singleLine="true"
+            android:textColor="@android:color/white"
+            android:textColorHint="#777777"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/etM3uName" />
+
+        <Button
+            android:id="@+id/btnSaveM3u"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="28dp"
+            android:text="Load Playlist"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/etM3uUrl" />
+
+        <ProgressBar
+            android:id="@+id/m3uProgressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/btnSaveM3u" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

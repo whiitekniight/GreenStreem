@@ -96,7 +96,11 @@ class MainFragment : BrowseSupportFragment() {
         val service = XtreamManager.getService()
         
         lifecycleScope.launch {
-            val hiddenIds = db.groupDao().getAllHidden().first().map { it.groupId }.toSet()
+            val hiddenIds = if (ProEntitlement.isProUnlocked(requireContext())) {
+                db.groupDao().getAllHidden().first().map { it.groupId }.toSet()
+            } else {
+                emptySet()
+            }
 
             service?.getLiveCategories(XtreamManager.username, XtreamManager.password)
                 ?.enqueue(object : Callback<List<XtreamCategory>> {

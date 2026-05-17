@@ -1,12 +1,15 @@
 package com.example.greenstreem
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -57,15 +60,18 @@ class SeriesDetailsActivity : AppCompatActivity() {
                     if (response.isSuccessful) {
                         val data = response.body()
                         tvPlot.text = data?.info?.plot ?: "No description available"
-                        allEpisodes = data?.episodes ?: emptyMap()
+                        allEpisodes = data?.episodes.orEmpty().filterValues { it.isNotEmpty() }
                         
-                        val seasons = data?.seasons ?: emptyList()
-                        rvSeasons.adapter = SeasonAdapter(seasons) { seasonNum ->
-                            displayEpisodes(seasonNum.toString())
+                        val seasonRows = buildSeasonRows(data?.seasons.orEmpty(), allEpisodes)
+                        rvSeasons.adapter = SeasonAdapter(seasonRows) { season ->
+                            displayEpisodes(season)
                         }
                         
-                        if (seasons.isNotEmpty()) {
-                            displayEpisodes(seasons[0].seasonNumber?.toString() ?: "1")
+                        if (seasonRows.isNotEmpty()) {
+                            displayEpisodes(seasonRows.first())
+                        } else {
+                            rvEpisodes.adapter = EpisodeAdapter(emptyList()) { }
+                            Toast.makeText(this@SeriesDetailsActivity, "No episodes found for this series", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -73,8 +79,15 @@ class SeriesDetailsActivity : AppCompatActivity() {
             })
     }
 
-    private fun displayEpisodes(seasonKey: String) {
-        val episodes = allEpisodes[seasonKey] ?: emptyList()
+    private fun displayEpisodes(season: SeasonRow) {
+        val seasonKey = season.key
+        val episodes = allEpisodes[seasonKey]
+            ?: allEpisodes[seasonKey.toIntOrNull()?.toString().orEmpty()]
+            ?: allEpisodes[seasonKey.toIntOrNull()?.let { "%02d".format(it) }.orEmpty()]
+            ?: season.number?.let { number ->
+                allEpisodes.values.flatten().filter { it.season == number }.takeIf { it.isNotEmpty() }
+            }
+            ?: emptyList()
         rvEpisodes.adapter = EpisodeAdapter(episodes) { episode ->
             val url = "${XtreamManager.baseUrl}/series/${XtreamManager.username}/${XtreamManager.password}/${episode.id}.${episode.containerExtension ?: "mp4"}"
             val resumeKey = "series_${seriesId}_s${seasonKey}_ep${episode.id}"
@@ -87,24 +100,95 @@ class SeriesDetailsActivity : AppCompatActivity() {
         }
     }
 
+    private fun buildSeasonRows(
+        seasons: List<XtreamSeason>,
+        episodes: Map<String, List<XtreamEpisode>>
+    ): List<SeasonRow> {
+        val rowsByNumber = linkedMapOf<Int, SeasonRow>()
+        val rowsWithoutNumber = linkedMapOf<String, SeasonRow>()
+
+        seasons.forEach { season ->
+            val number = season.seasonNumber ?: season.id ?: return@forEach
+            val key = findEpisodeKeyForSeason(number, episodes) ?: number.toString()
+            rowsByNumber.putIfAbsent(
+                number,
+                SeasonRow(key, season.name?.takeIf { it.isNotBlank() } ?: "Season $number", number)
+            )
+        }
+
+        episodes.forEach { (key, seasonEpisodes) ->
+            val number = key.toIntOrNull() ?: seasonEpisodes.firstNotNullOfOrNull { it.season }
+            if (number != null) {
+                rowsByNumber.putIfAbsent(number, SeasonRow(key, "Season $number", number))
+            } else {
+                rowsWithoutNumber.putIfAbsent(key, SeasonRow(key, "Season $key", null))
+            }
+        }
+
+        episodes.values.flatten()
+            .mapNotNull { it.season }
+            .distinct()
+            .forEach { number ->
+                rowsByNumber.putIfAbsent(
+                    number,
+                    SeasonRow(findEpisodeKeyForSeason(number, episodes) ?: number.toString(), "Season $number", number)
+                )
+            }
+
+        return rowsByNumber.values.sortedBy { it.number ?: Int.MAX_VALUE } + rowsWithoutNumber.values
+    }
+
+    private fun findEpisodeKeyForSeason(
+        seasonNumber: Int,
+        episodes: Map<String, List<XtreamEpisode>>
+    ): String? {
+        val candidates = listOf(seasonNumber.toString(), "%02d".format(seasonNumber))
+        return candidates.firstOrNull { episodes[it]?.isNotEmpty() == true }
+            ?: episodes.entries.firstOrNull { (_, eps) -> eps.any { it.season == seasonNumber } }?.key
+    }
+
+    private data class SeasonRow(
+        val key: String,
+        val label: String,
+        val number: Int?
+    )
+
     private class SeasonAdapter(
-        private val items: List<XtreamSeason>,
-        private val onClick: (Int) -> Unit
+        private val items: List<SeasonRow>,
+        private val onClick: (SeasonRow) -> Unit
     ) : RecyclerView.Adapter<SeasonAdapter.VH>() {
         class VH(v: View) : RecyclerView.ViewHolder(v) {
             val tv: TextView = v.findViewById(android.R.id.text1)
         }
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val v = LayoutInflater.from(parent.context).inflate(android.R.layout.simple_list_item_1, parent, false)
+            val context = parent.context
+            val v = TextView(context).apply {
+                id = android.R.id.text1
+                minWidth = (128 * context.resources.displayMetrics.density).toInt()
+                layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                ).apply {
+                    marginEnd = (10 * context.resources.displayMetrics.density).toInt()
+                }
+                gravity = Gravity.CENTER
+                setPadding(
+                    (18 * context.resources.displayMetrics.density).toInt(),
+                    0,
+                    (18 * context.resources.displayMetrics.density).toInt(),
+                    0
+                )
+                textSize = 17f
+            }
             return VH(v)
         }
         override fun onBindViewHolder(holder: VH, position: Int) {
             val s = items[position]
-            holder.tv.text = "Season ${s.seasonNumber}"
-            holder.tv.setTextColor(android.graphics.Color.WHITE)
+            holder.tv.text = s.label
+            holder.tv.setTextColor(Color.WHITE)
             holder.itemView.isFocusable = true
             holder.itemView.setBackgroundResource(R.drawable.selector_button_bg)
-            holder.itemView.setOnClickListener { onClick(s.seasonNumber ?: 1) }
+            holder.itemView.setOnClickListener { onClick(s) }
         }
         override fun getItemCount() = items.size
     }

@@ -5,12 +5,12 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/tivimate_background"
-    android:padding="32dp">
+    android:padding="24dp">
 
     <ImageView
         android:id="@+id/ivSeriesCover"
-        android:layout_width="200dp"
-        android:layout_height="300dp"
+        android:layout_width="104dp"
+        android:layout_height="156dp"
         android:scaleType="centerCrop"
         android:background="@drawable/selector_button_bg"
         app:layout_constraintStart_toStartOf="parent"
@@ -18,9 +18,10 @@
         tools:src="@android:drawable/ic_menu_report_image" />
 
     <LinearLayout
+        android:id="@+id/seriesHeader"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="32dp"
+        android:layout_marginStart="24dp"
         android:orientation="vertical"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/ivSeriesCover"
@@ -31,7 +32,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/tivimate_text_primary"
-            android:textSize="36sp"
+            android:textSize="28sp"
             android:textStyle="bold"
             tools:text="Series Name" />
 
@@ -39,9 +40,11 @@
             android:id="@+id/tvSeriesPlot"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="10dp"
+            android:maxLines="3"
+            android:ellipsize="end"
             android:textColor="@color/tivimate_text_secondary"
-            android:textSize="18sp"
+            android:textSize="15sp"
             tools:text="Series Plot description goes here..." />
     </LinearLayout>
 
@@ -49,27 +52,34 @@
         android:id="@+id/tvSeasonsLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="10dp"
         android:text="Seasons"
         android:textColor="@color/tivimate_accent_green"
         android:textSize="20sp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/ivSeriesCover" />
+        app:layout_constraintStart_toEndOf="@id/ivSeriesCover"
+        app:layout_constraintTop_toBottomOf="@id/seriesHeader" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvSeasons"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_width="0dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="24dp"
         android:layout_marginTop="8dp"
         android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/ivSeriesCover"
         app:layout_constraintTop_toBottomOf="@id/tvSeasonsLabel" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvEpisodes"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
+        android:layout_marginStart="24dp"
         android:layout_marginTop="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/ivSeriesCover"
         app:layout_constraintTop_toBottomOf="@id/rvSeasons" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

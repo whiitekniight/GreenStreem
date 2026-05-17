@@ -14,6 +14,8 @@ object XtreamManager {
     var password: String = ""
 
     fun init(url: String) {
+        service = null
+        baseUrl = ""
         if (url.isBlank()) return
         
         val logging = HttpLoggingInterceptor().apply {
@@ -39,6 +41,8 @@ object XtreamManager {
             service = retrofit.create(XtreamService::class.java)
             baseUrl = finalUrl.trimEnd('/')
         } catch (e: Exception) {
+            service = null
+            baseUrl = ""
             e.printStackTrace()
         }
     }
@@ -52,9 +56,7 @@ object XtreamManager {
         val url = prefs.getString("server_url", "") ?: ""
         username = prefs.getString("username", "") ?: ""
         password = prefs.getString("password", "") ?: ""
-        if (url.isNotEmpty()) {
-            init(url)
-        }
+        init(url)
     }
 
     fun getService(): XtreamService? = service

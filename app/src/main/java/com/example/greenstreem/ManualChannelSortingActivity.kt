@@ -35,6 +35,7 @@ class ManualChannelSortingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!ProFeatureGate.require(this, "Manual channel sorting is available in GreenStreem Pro.")) return
         setContentView(R.layout.activity_manage_groups)
 
         db = AppDatabase.getDatabase(this)
@@ -199,7 +200,7 @@ class ManualChannelSortingActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val item = items[position]
             val numberPrefix = item.number?.let { "$it. " } ?: ""
-            holder.tvName.text = numberPrefix + item.name
+            holder.tvName.text = numberPrefix + ChannelNameFormatter.format(holder.itemView.context, item.name)
             holder.itemView.isFocusable = true
             updateBackground(holder, position)
 

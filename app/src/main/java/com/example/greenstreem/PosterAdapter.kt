@@ -5,16 +5,31 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import android.text.TextUtils
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DecodeFormat
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.request.RequestOptions
 
 class PosterAdapter(
-    private val onClick: (Any) -> Unit,
+    private val onClick: (Any, Int) -> Unit,
     private val onFocus: (Any, Int) -> Unit,
-    private val onLongClick: (Any) -> Unit
+    private val onLongClick: (Any) -> Unit,
+    private val onResolveMoviePoster: (XtreamVodStream) -> Unit = {}
 ) : RecyclerView.Adapter<PosterAdapter.VH>() {
 
     private var items: List<Any> = emptyList()
+    private val moviePosterOverrides = mutableMapOf<Int, String>()
+    private val requestedMoviePosterIds = mutableSetOf<Int>()
+
+    private val posterOptions = RequestOptions()
+        .format(DecodeFormat.PREFER_RGB_565)
+        .disallowHardwareConfig()
+        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+        .override(124, 180)
+        .centerCrop()
+        .dontAnimate()
 
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val ivPoster: ImageView = v.findViewById(R.id.ivPoster)
@@ -23,10 +38,22 @@ class PosterAdapter(
 
     fun submitList(newItems: List<Any>) {
         items = newItems
+        requestedMoviePosterIds.retainAll(
+            newItems.filterIsInstance<XtreamVodStream>()
+                .map { it.streamId }
+                .toSet()
+        )
         notifyDataSetChanged()
     }
 
     fun getItemAt(position: Int): Any? = items.getOrNull(position)
+
+    fun updateVodPoster(streamId: Int, imageUrl: String?) {
+        val cleanUrl = imageUrl?.takeIf { it.isNotBlank() } ?: return
+        moviePosterOverrides[streamId] = cleanUrl
+        val index = items.indexOfFirst { it is XtreamVodStream && it.streamId == streamId }
+        if (index >= 0) notifyItemChanged(index)
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val v = LayoutInflater.from(parent.context).inflate(R.layout.item_poster, parent, false)
@@ -42,7 +69,11 @@ class PosterAdapter(
         when (item) {
             is XtreamVodStream -> {
                 title = item.name
-                imageUrl = item.streamIcon
+                imageUrl = item.streamIcon?.takeIf { it.isNotBlank() }
+                    ?: moviePosterOverrides[item.streamId]
+                if (imageUrl.isNullOrBlank() && requestedMoviePosterIds.add(item.streamId)) {
+                    onResolveMoviePoster(item)
+                }
             }
             is XtreamSeries -> {
                 title = item.name
@@ -54,35 +85,71 @@ class PosterAdapter(
             }
         }
 
-        holder.tvTitle.text = title
+        holder.tvTitle.apply {
+            text = title
+            isSingleLine = true
+            ellipsize = TextUtils.TruncateAt.MARQUEE
+            marqueeRepeatLimit = -1
+            setHorizontallyScrolling(true)
+            isSelected = holder.itemView.hasFocus()
+        }
         Glide.with(holder.itemView.context)
             .load(imageUrl)
             .placeholder(android.R.drawable.ic_menu_report_image)
-            .centerCrop()
+            .thumbnail(0.25f)
+            .apply(posterOptions)
             .into(holder.ivPoster)
 
         holder.itemView.isFocusable = true
         holder.itemView.isLongClickable = true
         holder.itemView.setBackgroundResource(R.drawable.selector_poster_bg)
         
-        holder.itemView.setOnClickListener { onClick(item) }
+        holder.itemView.setOnClickListener {
+            val pos = holder.bindingAdapterPosition
+            if (pos != RecyclerView.NO_POSITION) {
+                getItemAt(pos)?.let { currentItem -> onClick(currentItem, pos) }
+            }
+        }
         holder.itemView.setOnLongClickListener {
-            onLongClick(item)
-            true
+            val pos = holder.bindingAdapterPosition
+            if (pos != RecyclerView.NO_POSITION) {
+                getItemAt(pos)?.let(onLongClick)
+                true
+            } else {
+                false
+            }
         }
         holder.itemView.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
-                holder.itemView.animate().scaleX(1.13f).scaleY(1.13f).setDuration(180).start()
-                holder.itemView.elevation = 10f
+                holder.tvTitle.isSelected = true
+                holder.itemView.animate()
+                    .scaleX(1.0f)
+                    .scaleY(1.0f)
+                    .translationZ(4f)
+                    .setDuration(150)
+                    .start()
                 val pos = holder.bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) {
-                    onFocus(item, pos)
+                    getItemAt(pos)?.let { currentItem -> onFocus(currentItem, pos) }
                 }
             } else {
-                holder.itemView.animate().scaleX(1.0f).scaleY(1.0f).setDuration(160).start()
-                holder.itemView.elevation = 0f
+                holder.tvTitle.isSelected = false
+                holder.itemView.animate()
+                    .scaleX(1.0f)
+                    .scaleY(1.0f)
+                    .translationZ(0f)
+                    .setDuration(150)
+                    .start()
             }
         }
+    }
+
+    override fun onViewRecycled(holder: VH) {
+        Glide.with(holder.itemView).clear(holder.ivPoster)
+        holder.ivPoster.setImageDrawable(null)
+        holder.tvTitle.text = ""
+        holder.tvTitle.isSelected = false
+        super.onViewRecycled(holder)
     }
 
     override fun getItemCount() = items.size

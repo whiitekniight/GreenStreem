@@ -13,3 +13,14 @@
 .externalNativeBuild
 .cxx
 local.properties
+keystore.properties
+*.jks
+*.keystore
+.android-home/
+.gradle-home/
+.gradle-inspect/
+.gradle-user-home/
+.kotlin/
+.vscode/
+/app/play/
+/app/sideload/

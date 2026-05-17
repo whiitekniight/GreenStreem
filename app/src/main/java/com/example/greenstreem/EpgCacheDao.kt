@@ -15,4 +15,10 @@ interface EpgCacheDao {
 
     @Query("DELETE FROM epg_cache WHERE updatedAtMs < :olderThanMs")
     suspend fun deleteOlderThan(olderThanMs: Long)
+
+    @Query("DELETE FROM epg_cache WHERE streamId = :streamId")
+    suspend fun deleteByStreamId(streamId: Int)
+
+    @Query("DELETE FROM epg_cache")
+    suspend fun clearAll()
 }

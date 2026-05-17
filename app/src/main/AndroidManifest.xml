@@ -14,103 +14,138 @@
         android:required="false" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/tv_banner"
         android:label="@string/app_name"
+        android:largeHeap="true"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.GreenStreem">
 
         <activity
             android:name=".MainActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="landscape" />
 
         <activity
             android:name=".SetupActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".XtreamLoginActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name=".M3uLoginActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".PlaylistSettingsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".PlaylistManagerActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".TvSettingsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".PlaybackSettingsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name=".DownloadSettingsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".AdvancedSettingsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
         <activity
             android:name=".BackupRestoreActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".PlaylistProfileSettingsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".ChannelSortingModeActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
         <activity
             android:name=".ManualChannelSortingActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".ManageGroupsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".GroupSortingActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".SearchActivity"
             android:exported="false"
-            android:theme="@style/Theme.AppCompat.NoActionBar" />
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".SeriesDetailsActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".EpgActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="landscape" />
 
         <activity
             android:name=".SplashActivity"
             android:exported="true"
+            android:banner="@drawable/tv_banner"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.AppCompat.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

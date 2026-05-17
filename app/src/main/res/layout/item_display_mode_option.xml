@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/selector_button_bg"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="14dp">
+
+    <TextView
+        android:id="@+id/tvDisplayModeTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/tivimate_text_primary"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvDisplayModeDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/tivimate_text_secondary"
+        android:textSize="13sp" />
+</LinearLayout>

@@ -11,6 +11,7 @@ class ChannelSortingModeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!ProFeatureGate.require(this, "Channel sorting is available in GreenStreem Pro.")) return
         setContentView(R.layout.activity_playlist_settings) // Reuse layout
 
         val rvOptions = findViewById<RecyclerView>(R.id.rvPlaylistOptions)

@@ -18,7 +18,7 @@ class ChannelAdapter(private val items: List<Channel>) : RecyclerView.Adapter<Ch
     override fun onBindViewHolder(holder: VH, position: Int) {
         val c = items[position]
         holder.tvNumber.text = c.number.toString()
-        holder.tvName.text = c.name
+        holder.tvName.text = ChannelNameFormatter.format(holder.itemView.context, c.name)
     }
     override fun getItemCount() = items.size
 }
