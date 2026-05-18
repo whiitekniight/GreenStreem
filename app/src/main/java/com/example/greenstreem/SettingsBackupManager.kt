@@ -30,9 +30,16 @@ object SettingsBackupManager {
         }
     }
 
-    suspend fun backupNow(context: Context): Result<File> = runCatching {
+    data class BackupEntry(
+        val title: String,
+        val detail: String,
+        val file: File? = null,
+        val uri: Uri? = null
+    )
+
+    suspend fun backupNow(context: Context, label: String? = null): Result<File> = runCatching {
         val backupText = buildBackupJson(context).toString(2)
-        val out = writePrivateBackup(context, backupText)
+        val out = writePrivateBackup(context, backupText, label)
         writePublicBackup(context, out.name, backupText)
         out
     }
@@ -124,11 +131,36 @@ object SettingsBackupManager {
         restoreFromFile(context, file)
     }
 
+    suspend fun restoreEntry(context: Context, entry: BackupEntry): Result<RestoreSummary> = runCatching {
+        when {
+            entry.file != null -> restoreFromFile(context, entry.file)
+            entry.uri != null -> {
+                val text = context.contentResolver.openInputStream(entry.uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("Could not open backup")
+                restoreFromText(context, text)
+            }
+            else -> error("Backup file not found")
+        }
+    }
+
     fun listBackupFiles(context: Context): List<File> {
         return privateBackupDir(context).listFiles()
             ?.filter { it.isFile && it.extension.equals("json", ignoreCase = true) }
             ?.sortedByDescending { it.lastModified() }
             .orEmpty()
+    }
+
+    fun listAvailableBackups(context: Context): List<BackupEntry> {
+        val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        val privateEntries = listBackupFiles(context).map { file ->
+            BackupEntry(
+                title = file.nameWithoutExtension.removePrefix(BACKUP_PREFIX),
+                detail = "App backup - ${dateFmt.format(java.util.Date(file.lastModified()))}",
+                file = file
+            )
+        }
+        return (privateEntries + listPublicBackupEntries(context))
+            .distinctBy { it.title + "|" + it.detail }
     }
 
     fun backupDirectory(context: Context): File {
@@ -256,8 +288,19 @@ object SettingsBackupManager {
         return File(context.getExternalFilesDir(null), BACKUP_DIR).apply { mkdirs() }
     }
 
-    private fun writePrivateBackup(context: Context, backupText: String): File {
-        val out = File(privateBackupDir(context), "$BACKUP_PREFIX${System.currentTimeMillis()}$BACKUP_EXTENSION")
+    private fun writePrivateBackup(context: Context, backupText: String, label: String?): File {
+        val safeLabel = label
+            ?.trim()
+            ?.replace(Regex("""[^A-Za-z0-9._ -]"""), "")
+            ?.replace(Regex("""\s+"""), "-")
+            ?.take(40)
+            .orEmpty()
+        val suffix = if (safeLabel.isBlank()) {
+            System.currentTimeMillis().toString()
+        } else {
+            "$safeLabel-${System.currentTimeMillis()}"
+        }
+        val out = File(privateBackupDir(context), "$BACKUP_PREFIX$suffix$BACKUP_EXTENSION")
         out.writeText(backupText)
         return out
     }
@@ -322,5 +365,60 @@ object SettingsBackupManager {
             }
         }
         return null
+    }
+
+    private fun listPublicBackupEntries(context: Context): List<BackupEntry> {
+        val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), PUBLIC_BACKUP_DIR)
+            return dir.listFiles()
+                ?.filter { it.isFile && it.name.startsWith(BACKUP_PREFIX) && it.name.endsWith(BACKUP_EXTENSION) }
+                ?.sortedByDescending { it.lastModified() }
+                ?.map { file ->
+                    BackupEntry(
+                        title = file.nameWithoutExtension.removePrefix(BACKUP_PREFIX),
+                        detail = "Downloads backup - ${dateFmt.format(java.util.Date(file.lastModified()))}",
+                        file = file
+                    )
+                }
+                .orEmpty()
+        }
+
+        val entries = mutableListOf<BackupEntry>()
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.RELATIVE_PATH,
+            MediaStore.MediaColumns.DATE_MODIFIED
+        )
+        val downloadsPath = Environment.DIRECTORY_DOWNLOADS + "/$PUBLIC_BACKUP_DIR/"
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+        val selectionArgs = arrayOf("$BACKUP_PREFIX%$BACKUP_EXTENSION", downloadsPath)
+        val sortOrder = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        context.contentResolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            projection,
+            selection,
+            selectionArgs,
+            sortOrder
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameColumn)
+                if (!name.startsWith(BACKUP_PREFIX) || !name.endsWith(BACKUP_EXTENSION)) continue
+                val id = cursor.getLong(idColumn)
+                val modifiedMs = cursor.getLong(dateColumn) * 1000L
+                entries.add(
+                    BackupEntry(
+                        title = name.removeSuffix(BACKUP_EXTENSION).removePrefix(BACKUP_PREFIX),
+                        detail = "Downloads backup - ${dateFmt.format(java.util.Date(modifiedMs))}",
+                        uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
+                    )
+                )
+            }
+        }
+        return entries
     }
 }

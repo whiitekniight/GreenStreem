@@ -1,30 +1,22 @@
 package com.example.greenstreem
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import android.text.InputType
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class BackupRestoreActivity : AppCompatActivity() {
 
     private lateinit var rvOptions: RecyclerView
     private var rows: List<Row> = emptyList()
-    private val dateFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-    private val chooseBackupFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) restorePickedBackup(uri)
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,23 +29,18 @@ class BackupRestoreActivity : AppCompatActivity() {
     }
 
     private fun render() {
-        val backups = SettingsBackupManager.listBackupFiles(this)
+        val backups = SettingsBackupManager.listAvailableBackups(this)
         val list = mutableListOf<Row>(
-            Row.Action("Create backup now", Action.CREATE_BACKUP),
-            Row.Action("Choose backup file", Action.CHOOSE_BACKUP),
-            Row.Action("Restore backup from Downloads", Action.RESTORE_PUBLIC),
-            Row.Action("Restore latest backup", Action.RESTORE_LATEST),
+            Row.Action("Create named backup", Action.CREATE_BACKUP),
             Row.Action("Refresh backup list", Action.REFRESH_LIST)
         )
         if (backups.isEmpty()) {
-            list.add(Row.Info("No backups found"))
+            list.add(Row.Info("No backups found in ${SettingsBackupManager.publicBackupLocation()}"))
         } else {
-            backups.forEach { file ->
-                val date = dateFmt.format(Date(file.lastModified()))
-                list.add(Row.BackupFile(file, "Restore: ${file.name}\n$date"))
+            backups.forEach { backup ->
+                list.add(Row.BackupFile(backup, "${backup.title}\n${backup.detail}"))
             }
         }
-        list.add(Row.Info("App backups: ${SettingsBackupManager.backupDirectory(this).absolutePath}"))
         list.add(Row.Info("Downloads backups: ${SettingsBackupManager.publicBackupLocation()}"))
         rows = list
         rvOptions.adapter = BackupRowsAdapter(rows) { index -> onRowClick(rows[index]) }
@@ -62,70 +49,50 @@ class BackupRestoreActivity : AppCompatActivity() {
     private fun onRowClick(row: Row) {
         when (row) {
             is Row.Action -> handleAction(row.action)
-            is Row.BackupFile -> confirmRestore(row.file)
+            is Row.BackupFile -> confirmRestore(row.backup)
             is Row.Info -> Unit
         }
     }
 
     private fun handleAction(action: Action) {
         when (action) {
-            Action.CREATE_BACKUP -> lifecycleScope.launch {
-                val result = SettingsBackupManager.backupNow(this@BackupRestoreActivity)
-                result.onSuccess { file ->
-                    Toast.makeText(this@BackupRestoreActivity, "Backup saved: ${file.absolutePath} and ${SettingsBackupManager.publicBackupLocation()}", Toast.LENGTH_LONG).show()
-                    render()
-                }.onFailure { err ->
-                    Toast.makeText(this@BackupRestoreActivity, "Backup failed: ${err.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-            Action.CHOOSE_BACKUP -> chooseBackupFile.launch(arrayOf("application/json", "text/plain", "*/*"))
-            Action.RESTORE_LATEST -> lifecycleScope.launch {
-                val result = SettingsBackupManager.restoreLatest(this@BackupRestoreActivity)
-                result.onSuccess { (file, summary) ->
-                    Toast.makeText(this@BackupRestoreActivity, "${file.name}: ${summary.message()}", Toast.LENGTH_LONG).show()
-                    restartApp()
-                }.onFailure { err ->
-                    Toast.makeText(this@BackupRestoreActivity, "Restore failed: ${err.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-            Action.RESTORE_PUBLIC -> lifecycleScope.launch {
-                val result = SettingsBackupManager.restoreLatestPublic(this@BackupRestoreActivity)
-                result.onSuccess { (location, summary) ->
-                    Toast.makeText(this@BackupRestoreActivity, "$location: ${summary.message()}", Toast.LENGTH_LONG).show()
-                    restartApp()
-                }.onFailure { err ->
-                    Toast.makeText(this@BackupRestoreActivity, "Restore failed: ${err.message}", Toast.LENGTH_LONG).show()
-                }
-            }
+            Action.CREATE_BACKUP -> showBackupNameDialog()
             Action.REFRESH_LIST -> render()
         }
     }
 
-    private fun restorePickedBackup(uri: Uri) {
-        lifecycleScope.launch {
-            val result = runCatching {
-                contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                    ?: error("Could not open selected backup")
-            }.fold(
-                onSuccess = { SettingsBackupManager.restoreBackupText(this@BackupRestoreActivity, it) },
-                onFailure = { Result.failure(it) }
-            )
-            result.onSuccess { summary ->
-                Toast.makeText(this@BackupRestoreActivity, summary.message(), Toast.LENGTH_LONG).show()
-                restartApp()
-            }.onFailure { err ->
-                Toast.makeText(this@BackupRestoreActivity, "Restore failed: ${err.message}", Toast.LENGTH_LONG).show()
-            }
+    private fun showBackupNameDialog() {
+        val input = EditText(this).apply {
+            hint = "Living room Shield"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            setSingleLine(true)
         }
+        AlertDialog.Builder(this)
+            .setTitle("Name backup")
+            .setView(input)
+            .setPositiveButton("Backup") { _, _ ->
+                val label = input.text?.toString()?.trim().orEmpty()
+                lifecycleScope.launch {
+                    val result = SettingsBackupManager.backupNow(this@BackupRestoreActivity, label)
+                    result.onSuccess { file ->
+                        Toast.makeText(this@BackupRestoreActivity, "Backup saved: ${file.name}", Toast.LENGTH_LONG).show()
+                        render()
+                    }.onFailure { err ->
+                        Toast.makeText(this@BackupRestoreActivity, "Backup failed: ${err.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
-    private fun confirmRestore(file: File) {
+    private fun confirmRestore(backup: SettingsBackupManager.BackupEntry) {
         AlertDialog.Builder(this)
             .setTitle("Restore backup")
-            .setMessage("Restore from ${file.name}? This will overwrite current settings.")
+            .setMessage("Restore ${backup.title}? This will overwrite current settings.")
             .setPositiveButton("Restore") { _, _ ->
                 lifecycleScope.launch {
-                    val result = SettingsBackupManager.restoreFile(this@BackupRestoreActivity, file)
+                    val result = SettingsBackupManager.restoreEntry(this@BackupRestoreActivity, backup)
                     result.onSuccess { summary ->
                         Toast.makeText(this@BackupRestoreActivity, summary.message(), Toast.LENGTH_LONG).show()
                         restartApp()
@@ -148,15 +115,12 @@ class BackupRestoreActivity : AppCompatActivity() {
 
     private sealed class Row {
         data class Action(val title: String, val action: com.example.greenstreem.BackupRestoreActivity.Action) : Row()
-        data class BackupFile(val file: File, val title: String) : Row()
+        data class BackupFile(val backup: SettingsBackupManager.BackupEntry, val title: String) : Row()
         data class Info(val title: String) : Row()
     }
 
     private enum class Action {
         CREATE_BACKUP,
-        CHOOSE_BACKUP,
-        RESTORE_PUBLIC,
-        RESTORE_LATEST,
         REFRESH_LIST
     }
 
