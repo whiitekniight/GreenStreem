@@ -1,7 +1,7 @@
 {
-  "versionCode": 38,
-  "versionName": "1.9.2",
+  "versionCode": 39,
+  "versionName": "1.9.3",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Improves backup restore after reinstall and fixes channel logo size settings."
+  "notes": "Adds direct backup file restore and fixes channel logo size settings."
 }
 

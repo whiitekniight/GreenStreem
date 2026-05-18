@@ -18,6 +18,18 @@ object SettingsBackupManager {
     private const val BACKUP_PREFIX = "greenstreem-backup-"
     private const val BACKUP_EXTENSION = ".json"
 
+    data class RestoreSummary(
+        val favorites: Int,
+        val hiddenGroups: Int,
+        val hiddenChannels: Int,
+        val groupOrder: Int,
+        val channelOrder: Int
+    ) {
+        fun message(): String {
+            return "Restored favorites=$favorites, hidden groups=$hiddenGroups, hidden channels=$hiddenChannels, group order=$groupOrder, channel order=$channelOrder"
+        }
+    }
+
     suspend fun backupNow(context: Context): Result<File> = runCatching {
         val backupText = buildBackupJson(context).toString(2)
         val out = writePrivateBackup(context, backupText)
@@ -101,17 +113,15 @@ object SettingsBackupManager {
         return root
     }
 
-    suspend fun restoreLatest(context: Context): Result<File> = runCatching {
+    suspend fun restoreLatest(context: Context): Result<Pair<File, RestoreSummary>> = runCatching {
         val file = listBackupFiles(context).firstOrNull()
             ?: error("No backup file found")
-        restoreFromFile(context, file)
-        file
+        file to restoreFromFile(context, file)
     }
 
-    suspend fun restoreFile(context: Context, file: File): Result<File> = runCatching {
+    suspend fun restoreFile(context: Context, file: File): Result<RestoreSummary> = runCatching {
         if (!file.exists() || !file.isFile) error("Backup file not found")
         restoreFromFile(context, file)
-        file
     }
 
     fun listBackupFiles(context: Context): List<File> {
@@ -127,23 +137,26 @@ object SettingsBackupManager {
 
     fun publicBackupLocation(): String = "Downloads/$PUBLIC_BACKUP_DIR"
 
-    suspend fun restoreLatestPublic(context: Context): Result<String> = runCatching {
+    suspend fun restoreLatestPublic(context: Context): Result<Pair<String, RestoreSummary>> = runCatching {
         val backupText = readLatestPublicBackup(context)
             ?: error("No backup found in ${publicBackupLocation()}")
+        publicBackupLocation() to restoreFromText(context, backupText)
+    }
+
+    suspend fun restoreBackupText(context: Context, backupText: String): Result<RestoreSummary> = runCatching {
         restoreFromText(context, backupText)
-        publicBackupLocation()
     }
 
-    private suspend fun restoreFromFile(context: Context, file: File) {
-        restoreFromText(context, file.readText())
+    private suspend fun restoreFromFile(context: Context, file: File): RestoreSummary {
+        return restoreFromText(context, file.readText())
     }
 
-    private suspend fun restoreFromText(context: Context, text: String) {
+    private suspend fun restoreFromText(context: Context, text: String): RestoreSummary {
         val root = JSONObject(text)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val db = AppDatabase.getDatabase(context)
 
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
         val prefsArray = root.optJSONArray("prefs") ?: JSONArray()
         val edit = prefs.edit()
         for (i in 0 until prefsArray.length()) {
@@ -166,7 +179,7 @@ object SettingsBackupManager {
                 }
             }
         }
-        edit.apply()
+        edit.commit()
 
         db.favoriteDao().clearAll()
         db.groupDao().clearAll()
@@ -230,6 +243,13 @@ object SettingsBackupManager {
 
         XtreamManager.initFromPrefs(context)
         PlaylistProfilesManager.syncLegacyKeysToActive(context)
+        return RestoreSummary(
+            favorites = favorites.size,
+            hiddenGroups = hiddenGroups.size,
+            hiddenChannels = hiddenChannels.size,
+            groupOrder = groupOrder.size,
+            channelOrder = channelOrder.size
+        )
     }
 
     private fun privateBackupDir(context: Context): File {
@@ -277,10 +297,12 @@ object SettingsBackupManager {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.RELATIVE_PATH,
             MediaStore.MediaColumns.DATE_MODIFIED
         )
-        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
-        val selectionArgs = arrayOf("$BACKUP_PREFIX%$BACKUP_EXTENSION")
+        val downloadsPath = Environment.DIRECTORY_DOWNLOADS + "/$PUBLIC_BACKUP_DIR/"
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+        val selectionArgs = arrayOf("$BACKUP_PREFIX%$BACKUP_EXTENSION", downloadsPath)
         val sortOrder = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
         context.contentResolver.query(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,

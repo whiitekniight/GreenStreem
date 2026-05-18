@@ -156,8 +156,8 @@ class AdvancedSettingsActivity : AppCompatActivity() {
             }
             "restore_settings" -> lifecycleScope.launch {
                 val result = SettingsBackupManager.restoreLatest(this@AdvancedSettingsActivity)
-                result.onSuccess { file ->
-                    Toast.makeText(this@AdvancedSettingsActivity, "Restored: ${file.name}", Toast.LENGTH_LONG).show()
+                result.onSuccess { (file, summary) ->
+                    Toast.makeText(this@AdvancedSettingsActivity, "${file.name}: ${summary.message()}", Toast.LENGTH_LONG).show()
                     render()
                 }.onFailure { err ->
                     Toast.makeText(this@AdvancedSettingsActivity, "Restore failed: ${err.message}", Toast.LENGTH_LONG).show()
