@@ -1,6 +1,10 @@
 package com.example.greenstreem
 
 import android.content.Context
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
@@ -10,8 +14,18 @@ object SettingsBackupManager {
 
     private const val PREFS_NAME = "iptv_prefs"
     private const val BACKUP_DIR = "backups"
+    private const val PUBLIC_BACKUP_DIR = "GreenStreem/backups"
+    private const val BACKUP_PREFIX = "greenstreem-backup-"
+    private const val BACKUP_EXTENSION = ".json"
 
     suspend fun backupNow(context: Context): Result<File> = runCatching {
+        val backupText = buildBackupJson(context).toString(2)
+        val out = writePrivateBackup(context, backupText)
+        writePublicBackup(context, out.name, backupText)
+        out
+    }
+
+    private suspend fun buildBackupJson(context: Context): JSONObject {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val db = AppDatabase.getDatabase(context)
 
@@ -84,10 +98,7 @@ object SettingsBackupManager {
             }
         })
 
-        val backupDir = File(context.getExternalFilesDir(null), BACKUP_DIR).apply { mkdirs() }
-        val out = File(backupDir, "greenstreem-backup-${System.currentTimeMillis()}.json")
-        out.writeText(root.toString(2))
-        out
+        return root
     }
 
     suspend fun restoreLatest(context: Context): Result<File> = runCatching {
@@ -104,19 +115,31 @@ object SettingsBackupManager {
     }
 
     fun listBackupFiles(context: Context): List<File> {
-        val backupDir = File(context.getExternalFilesDir(null), BACKUP_DIR)
-        return backupDir.listFiles()
+        return privateBackupDir(context).listFiles()
             ?.filter { it.isFile && it.extension.equals("json", ignoreCase = true) }
             ?.sortedByDescending { it.lastModified() }
             .orEmpty()
     }
 
     fun backupDirectory(context: Context): File {
-        return File(context.getExternalFilesDir(null), BACKUP_DIR).apply { mkdirs() }
+        return privateBackupDir(context)
+    }
+
+    fun publicBackupLocation(): String = "Downloads/$PUBLIC_BACKUP_DIR"
+
+    suspend fun restoreLatestPublic(context: Context): Result<String> = runCatching {
+        val backupText = readLatestPublicBackup(context)
+            ?: error("No backup found in ${publicBackupLocation()}")
+        restoreFromText(context, backupText)
+        publicBackupLocation()
     }
 
     private suspend fun restoreFromFile(context: Context, file: File) {
-        val root = JSONObject(file.readText())
+        restoreFromText(context, file.readText())
+    }
+
+    private suspend fun restoreFromText(context: Context, text: String) {
+        val root = JSONObject(text)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val db = AppDatabase.getDatabase(context)
 
@@ -207,5 +230,75 @@ object SettingsBackupManager {
 
         XtreamManager.initFromPrefs(context)
         PlaylistProfilesManager.syncLegacyKeysToActive(context)
+    }
+
+    private fun privateBackupDir(context: Context): File {
+        return File(context.getExternalFilesDir(null), BACKUP_DIR).apply { mkdirs() }
+    }
+
+    private fun writePrivateBackup(context: Context, backupText: String): File {
+        val out = File(privateBackupDir(context), "$BACKUP_PREFIX${System.currentTimeMillis()}$BACKUP_EXTENSION")
+        out.writeText(backupText)
+        return out
+    }
+
+    private fun writePublicBackup(context: Context, fileName: String, backupText: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = android.content.ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/$PUBLIC_BACKUP_DIR")
+            }
+            val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: error("Could not create backup in Downloads")
+            context.contentResolver.openOutputStream(uri)?.use { stream ->
+                stream.write(backupText.toByteArray(Charsets.UTF_8))
+            } ?: error("Could not write backup in Downloads")
+        } else {
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), PUBLIC_BACKUP_DIR)
+                .apply { mkdirs() }
+            File(dir, fileName).writeText(backupText)
+        }
+    }
+
+    private fun readLatestPublicBackup(context: Context): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return readLatestPublicBackupFromMediaStore(context)
+        }
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), PUBLIC_BACKUP_DIR)
+        val file = dir.listFiles()
+            ?.filter { it.isFile && it.name.startsWith(BACKUP_PREFIX) && it.name.endsWith(BACKUP_EXTENSION) }
+            ?.maxByOrNull { it.lastModified() }
+            ?: return null
+        return file.readText()
+    }
+
+    private fun readLatestPublicBackupFromMediaStore(context: Context): String? {
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.DATE_MODIFIED
+        )
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+        val selectionArgs = arrayOf("$BACKUP_PREFIX%$BACKUP_EXTENSION")
+        val sortOrder = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        context.contentResolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            projection,
+            selection,
+            selectionArgs,
+            sortOrder
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameColumn)
+                if (!name.startsWith(BACKUP_PREFIX) || !name.endsWith(BACKUP_EXTENSION)) continue
+                val id = cursor.getLong(idColumn)
+                val uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
+                return context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            }
+        }
+        return null
     }
 }

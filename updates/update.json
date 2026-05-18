@@ -1,7 +1,7 @@
 {
-  "versionCode": 37,
-  "versionName": "1.9.1",
+  "versionCode": 38,
+  "versionName": "1.9.2",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Fixes the branded sideload phone launcher icon and keeps the poster browsing improvements."
+  "notes": "Improves backup restore after reinstall and fixes channel logo size settings."
 }
 

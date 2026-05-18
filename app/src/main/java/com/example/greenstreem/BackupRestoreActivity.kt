@@ -34,6 +34,7 @@ class BackupRestoreActivity : AppCompatActivity() {
         val backups = SettingsBackupManager.listBackupFiles(this)
         val list = mutableListOf<Row>(
             Row.Action("Create backup now", Action.CREATE_BACKUP),
+            Row.Action("Restore backup from Downloads", Action.RESTORE_PUBLIC),
             Row.Action("Restore latest backup", Action.RESTORE_LATEST),
             Row.Action("Refresh backup list", Action.REFRESH_LIST)
         )
@@ -62,7 +63,7 @@ class BackupRestoreActivity : AppCompatActivity() {
             Action.CREATE_BACKUP -> lifecycleScope.launch {
                 val result = SettingsBackupManager.backupNow(this@BackupRestoreActivity)
                 result.onSuccess { file ->
-                    Toast.makeText(this@BackupRestoreActivity, "Backup saved: ${file.name}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@BackupRestoreActivity, "Backup saved: ${SettingsBackupManager.publicBackupLocation()}", Toast.LENGTH_LONG).show()
                     render()
                 }.onFailure { err ->
                     Toast.makeText(this@BackupRestoreActivity, "Backup failed: ${err.message}", Toast.LENGTH_LONG).show()
@@ -72,6 +73,15 @@ class BackupRestoreActivity : AppCompatActivity() {
                 val result = SettingsBackupManager.restoreLatest(this@BackupRestoreActivity)
                 result.onSuccess { file ->
                     Toast.makeText(this@BackupRestoreActivity, "Restored: ${file.name}", Toast.LENGTH_LONG).show()
+                    render()
+                }.onFailure { err ->
+                    Toast.makeText(this@BackupRestoreActivity, "Restore failed: ${err.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            Action.RESTORE_PUBLIC -> lifecycleScope.launch {
+                val result = SettingsBackupManager.restoreLatestPublic(this@BackupRestoreActivity)
+                result.onSuccess { location ->
+                    Toast.makeText(this@BackupRestoreActivity, "Restored from $location", Toast.LENGTH_LONG).show()
                     render()
                 }.onFailure { err ->
                     Toast.makeText(this@BackupRestoreActivity, "Restore failed: ${err.message}", Toast.LENGTH_LONG).show()
@@ -108,6 +118,7 @@ class BackupRestoreActivity : AppCompatActivity() {
 
     private enum class Action {
         CREATE_BACKUP,
+        RESTORE_PUBLIC,
         RESTORE_LATEST,
         REFRESH_LIST
     }

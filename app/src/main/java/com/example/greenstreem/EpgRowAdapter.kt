@@ -188,6 +188,7 @@ class EpgRowAdapter(
             updatePlayingIndicator(holder, position)
             updateCatchupIndicator(holder, channel)
             updateVisibilityIndicator(holder, channel)
+            updateLogoAppearance(holder)
 
             Glide.with(holder.itemView.context)
                 .load(channel.logoUrl)
@@ -226,6 +227,24 @@ class EpgRowAdapter(
         )
         holder.ivVisibilityEye.setOnClickListener { onVisibilityToggleClick(channel) }
         holder.tvName.alpha = if (hidden) 0.65f else 1f
+    }
+
+    private fun updateLogoAppearance(holder: VH) {
+        val prefs = holder.itemView.context.getSharedPreferences("iptv_prefs", android.content.Context.MODE_PRIVATE)
+        val showLogos = prefs.getBoolean("appearance_show_logos", true)
+        holder.ivLogo.visibility = if (showLogos) View.VISIBLE else View.GONE
+        if (!showLogos) return
+
+        val sizeDp = when (prefs.getInt("appearance_logo_size", 1).coerceIn(0, 2)) {
+            0 -> 20
+            2 -> 32
+            else -> 26
+        }
+        val sizePx = holder.itemView.context.dp(sizeDp)
+        holder.ivLogo.layoutParams = holder.ivLogo.layoutParams.apply {
+            width = sizePx
+            height = sizePx
+        }
     }
 
     private fun updatePlayingIndicator(holder: VH, position: Int) {
