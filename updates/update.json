@@ -1,7 +1,7 @@
 {
-  "versionCode": 40,
-  "versionName": "1.9.4",
+  "versionCode": 41,
+  "versionName": "1.9.5",
   "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk",
-  "notes": "Simplifies backup restore with named backups shown directly in GreenStreem."
+  "notes": "Improves backup discovery and keeps direct file restore available."
 }
 

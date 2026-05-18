@@ -1,11 +1,13 @@
 package com.example.greenstreem
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -17,6 +19,9 @@ class BackupRestoreActivity : AppCompatActivity() {
 
     private lateinit var rvOptions: RecyclerView
     private var rows: List<Row> = emptyList()
+    private val chooseBackupFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) restorePickedBackup(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,6 +37,7 @@ class BackupRestoreActivity : AppCompatActivity() {
         val backups = SettingsBackupManager.listAvailableBackups(this)
         val list = mutableListOf<Row>(
             Row.Action("Create named backup", Action.CREATE_BACKUP),
+            Row.Action("Find backup file", Action.CHOOSE_BACKUP),
             Row.Action("Refresh backup list", Action.REFRESH_LIST)
         )
         if (backups.isEmpty()) {
@@ -57,7 +63,26 @@ class BackupRestoreActivity : AppCompatActivity() {
     private fun handleAction(action: Action) {
         when (action) {
             Action.CREATE_BACKUP -> showBackupNameDialog()
+            Action.CHOOSE_BACKUP -> chooseBackupFile.launch(arrayOf("application/json", "text/plain", "*/*"))
             Action.REFRESH_LIST -> render()
+        }
+    }
+
+    private fun restorePickedBackup(uri: Uri) {
+        lifecycleScope.launch {
+            val result = runCatching {
+                contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("Could not open selected backup")
+            }.fold(
+                onSuccess = { SettingsBackupManager.restoreBackupText(this@BackupRestoreActivity, it) },
+                onFailure = { Result.failure(it) }
+            )
+            result.onSuccess { summary ->
+                Toast.makeText(this@BackupRestoreActivity, summary.message(), Toast.LENGTH_LONG).show()
+                restartApp()
+            }.onFailure { err ->
+                Toast.makeText(this@BackupRestoreActivity, "Restore failed: ${err.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -121,6 +146,7 @@ class BackupRestoreActivity : AppCompatActivity() {
 
     private enum class Action {
         CREATE_BACKUP,
+        CHOOSE_BACKUP,
         REFRESH_LIST
     }
 

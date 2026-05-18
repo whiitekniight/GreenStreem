@@ -159,7 +159,7 @@ object SettingsBackupManager {
                 file = file
             )
         }
-        return (privateEntries + listPublicBackupEntries(context))
+        return (privateEntries + listPublicBackupEntries(context) + listPublicBackupFilesDirect())
             .distinctBy { it.title + "|" + it.detail }
     }
 
@@ -420,5 +420,21 @@ object SettingsBackupManager {
             }
         }
         return entries
+    }
+
+    private fun listPublicBackupFilesDirect(): List<BackupEntry> {
+        val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), PUBLIC_BACKUP_DIR)
+        return dir.listFiles()
+            ?.filter { it.isFile && it.name.startsWith(BACKUP_PREFIX) && it.name.endsWith(BACKUP_EXTENSION) }
+            ?.sortedByDescending { it.lastModified() }
+            ?.map { file ->
+                BackupEntry(
+                    title = file.nameWithoutExtension.removePrefix(BACKUP_PREFIX),
+                    detail = "Downloads backup - ${dateFmt.format(java.util.Date(file.lastModified()))}",
+                    file = file
+                )
+            }
+            .orEmpty()
     }
 }
