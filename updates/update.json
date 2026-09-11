@@ -1,7 +1,7 @@
 {
-  "versionCode": 77,
-  "versionName": "1.9.41",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.41",
-  "notes": "Makes the automatic restore-code backup setting clear with a visible ON/OFF switch designed for TV remotes."
+  "versionCode": 78,
+  "versionName": "1.9.42",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.42",
+  "notes": "Keeps Live TV and the EPG responsive after leaving Search by cancelling Search-owned requests and limiting background catalog loading."
 }
 

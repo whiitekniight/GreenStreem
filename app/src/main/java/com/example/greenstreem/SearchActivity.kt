@@ -66,6 +66,8 @@ class SearchActivity : AppCompatActivity() {
     private var lastSearchQuery: String = ""
     private var pendingFocusPosition: Int = RecyclerView.NO_POSITION
     private val gson = Gson()
+    private val searchCalls = mutableSetOf<Call<*>>()
+    private var searchActivityStopped = false
 
     private data class ProgramSearchResult(
         val channel: Channel,
@@ -183,7 +185,38 @@ class SearchActivity : AppCompatActivity() {
     override fun onDestroy() {
         searchRunnable?.let { searchHandler.removeCallbacks(it) }
         dataRefreshRunnable?.let { searchHandler.removeCallbacks(it) }
+        cancelSearchCalls()
         super.onDestroy()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        searchActivityStopped = false
+    }
+
+    override fun onStop() {
+        searchActivityStopped = true
+        searchRunnable?.let { searchHandler.removeCallbacks(it) }
+        dataRefreshRunnable?.let { searchHandler.removeCallbacks(it) }
+        cancelSearchCalls()
+        super.onStop()
+    }
+
+    private fun trackSearchCall(call: Call<*>) {
+        if (searchActivityStopped || isFinishing || isDestroyed) {
+            call.cancel()
+        } else {
+            searchCalls.add(call)
+        }
+    }
+
+    private fun finishSearchCall(call: Call<*>) {
+        searchCalls.remove(call)
+    }
+
+    private fun cancelSearchCalls() {
+        searchCalls.toList().forEach { it.cancel() }
+        searchCalls.clear()
     }
 
     private fun fetchAllData() {
@@ -192,8 +225,12 @@ class SearchActivity : AppCompatActivity() {
         val pass = XtreamManager.password
 
         // Fetch Live Channels
-        service.getLiveStreams(user, pass).enqueue(object : Callback<List<XtreamLiveStream>> {
+        val liveCall = service.getLiveStreams(user, pass)
+        trackSearchCall(liveCall)
+        liveCall.enqueue(object : Callback<List<XtreamLiveStream>> {
             override fun onResponse(call: Call<List<XtreamLiveStream>>, response: Response<List<XtreamLiveStream>>) {
+                finishSearchCall(call)
+                if (searchActivityStopped) return
                 if (response.isSuccessful) {
                     allChannels = response.body()?.map { stream ->
                         Channel(id = stream.streamId.toLong(), name = stream.name, group = "", logoUrl = stream.streamIcon, streamUrl = "", epgId = stream.epgId, number = stream.num)
@@ -202,12 +239,18 @@ class SearchActivity : AppCompatActivity() {
                     rerunVisibleSearch()
                 }
             }
-            override fun onFailure(call: Call<List<XtreamLiveStream>>, t: Throwable) {}
+            override fun onFailure(call: Call<List<XtreamLiveStream>>, t: Throwable) {
+                finishSearchCall(call)
+            }
         })
 
         // Fetch Movies
-        service.getVodStreams(user, pass).enqueue(object : Callback<List<XtreamVodStream>> {
+        val moviesCall = service.getVodStreams(user, pass)
+        trackSearchCall(moviesCall)
+        moviesCall.enqueue(object : Callback<List<XtreamVodStream>> {
             override fun onResponse(call: Call<List<XtreamVodStream>>, response: Response<List<XtreamVodStream>>) {
+                finishSearchCall(call)
+                if (searchActivityStopped) return
                 if (response.isSuccessful) {
                     val movies = response.body().orEmpty()
                     mergeMovies(movies)
@@ -216,13 +259,19 @@ class SearchActivity : AppCompatActivity() {
                 }
             }
             override fun onFailure(call: Call<List<XtreamVodStream>>, t: Throwable) {
+                finishSearchCall(call)
+                if (call.isCanceled || searchActivityStopped) return
                 fetchMoviesByCategory(service, user, pass)
             }
         })
 
         // Fetch Series
-        service.getSeries(user, pass).enqueue(object : Callback<List<XtreamSeries>> {
+        val seriesCall = service.getSeries(user, pass)
+        trackSearchCall(seriesCall)
+        seriesCall.enqueue(object : Callback<List<XtreamSeries>> {
             override fun onResponse(call: Call<List<XtreamSeries>>, response: Response<List<XtreamSeries>>) {
+                finishSearchCall(call)
+                if (searchActivityStopped) return
                 if (response.isSuccessful) {
                     val series = response.body().orEmpty()
                     mergeSeries(series)
@@ -231,28 +280,37 @@ class SearchActivity : AppCompatActivity() {
                 }
             }
             override fun onFailure(call: Call<List<XtreamSeries>>, t: Throwable) {
+                finishSearchCall(call)
+                if (call.isCanceled || searchActivityStopped) return
                 fetchSeriesByCategory(service, user, pass)
             }
         })
 
         // Let the fast all-content endpoints populate results first, then expand
         // in the background for providers whose unfiltered response is incomplete.
-        searchHandler.postDelayed({
+        dataRefreshRunnable = Runnable {
+            if (searchActivityStopped) return@Runnable
             fetchMoviesByCategory(service, user, pass)
             fetchSeriesByCategory(service, user, pass)
-        }, 1_500L)
+        }
+        searchHandler.postDelayed(dataRefreshRunnable!!, 1_500L)
     }
 
     private fun fetchMoviesByCategory(service: XtreamService, user: String, pass: String) {
         if (movieCategoryFetchStarted) return
         movieCategoryFetchStarted = true
-        service.getVodCategories(user, pass).enqueue(object : Callback<List<XtreamCategory>> {
+        val categoriesCall = service.getVodCategories(user, pass)
+        trackSearchCall(categoriesCall)
+        categoriesCall.enqueue(object : Callback<List<XtreamCategory>> {
             override fun onResponse(call: Call<List<XtreamCategory>>, response: Response<List<XtreamCategory>>) {
+                finishSearchCall(call)
+                if (searchActivityStopped) return
                 if (!response.isSuccessful) return
                 val categories = response.body().orEmpty()
                 if (categories.isEmpty()) return
                 val collected = ArrayList<XtreamVodStream>()
                 var remaining = categories.size
+                var nextCategory = 0
                 fun finishCategory(movies: List<XtreamVodStream>) {
                     collected.addAll(movies)
                     remaining--
@@ -261,31 +319,49 @@ class SearchActivity : AppCompatActivity() {
                         rerunVisibleSearch()
                     }
                 }
-                categories.forEach { category ->
-                    service.getVodStreams(user, pass, category.id).enqueue(object : Callback<List<XtreamVodStream>> {
+                fun launchNext() {
+                    if (searchActivityStopped || nextCategory >= categories.size) return
+                    val category = categories[nextCategory++]
+                    val categoryCall = service.getVodStreams(user, pass, category.id)
+                    trackSearchCall(categoryCall)
+                    categoryCall.enqueue(object : Callback<List<XtreamVodStream>> {
                         override fun onResponse(call: Call<List<XtreamVodStream>>, response: Response<List<XtreamVodStream>>) {
+                            finishSearchCall(call)
+                            if (searchActivityStopped) return
                             finishCategory(if (response.isSuccessful) response.body().orEmpty() else emptyList())
+                            launchNext()
                         }
                         override fun onFailure(call: Call<List<XtreamVodStream>>, t: Throwable) {
+                            finishSearchCall(call)
+                            if (call.isCanceled || searchActivityStopped) return
                             finishCategory(emptyList())
+                            launchNext()
                         }
                     })
                 }
+                repeat(minOf(SEARCH_CATEGORY_CONCURRENCY, categories.size)) { launchNext() }
             }
-            override fun onFailure(call: Call<List<XtreamCategory>>, t: Throwable) {}
+            override fun onFailure(call: Call<List<XtreamCategory>>, t: Throwable) {
+                finishSearchCall(call)
+            }
         })
     }
 
     private fun fetchSeriesByCategory(service: XtreamService, user: String, pass: String) {
         if (seriesCategoryFetchStarted) return
         seriesCategoryFetchStarted = true
-        service.getSeriesCategories(user, pass).enqueue(object : Callback<List<XtreamCategory>> {
+        val categoriesCall = service.getSeriesCategories(user, pass)
+        trackSearchCall(categoriesCall)
+        categoriesCall.enqueue(object : Callback<List<XtreamCategory>> {
             override fun onResponse(call: Call<List<XtreamCategory>>, response: Response<List<XtreamCategory>>) {
+                finishSearchCall(call)
+                if (searchActivityStopped) return
                 if (!response.isSuccessful) return
                 val categories = response.body().orEmpty()
                 if (categories.isEmpty()) return
                 val collected = ArrayList<XtreamSeries>()
                 var remaining = categories.size
+                var nextCategory = 0
                 fun finishCategory(series: List<XtreamSeries>) {
                     collected.addAll(series)
                     remaining--
@@ -294,18 +370,31 @@ class SearchActivity : AppCompatActivity() {
                         rerunVisibleSearch()
                     }
                 }
-                categories.forEach { category ->
-                    service.getSeries(user, pass, category.id).enqueue(object : Callback<List<XtreamSeries>> {
+                fun launchNext() {
+                    if (searchActivityStopped || nextCategory >= categories.size) return
+                    val category = categories[nextCategory++]
+                    val categoryCall = service.getSeries(user, pass, category.id)
+                    trackSearchCall(categoryCall)
+                    categoryCall.enqueue(object : Callback<List<XtreamSeries>> {
                         override fun onResponse(call: Call<List<XtreamSeries>>, response: Response<List<XtreamSeries>>) {
+                            finishSearchCall(call)
+                            if (searchActivityStopped) return
                             finishCategory(if (response.isSuccessful) response.body().orEmpty() else emptyList())
+                            launchNext()
                         }
                         override fun onFailure(call: Call<List<XtreamSeries>>, t: Throwable) {
+                            finishSearchCall(call)
+                            if (call.isCanceled || searchActivityStopped) return
                             finishCategory(emptyList())
+                            launchNext()
                         }
                     })
                 }
+                repeat(minOf(SEARCH_CATEGORY_CONCURRENCY, categories.size)) { launchNext() }
             }
-            override fun onFailure(call: Call<List<XtreamCategory>>, t: Throwable) {}
+            override fun onFailure(call: Call<List<XtreamCategory>>, t: Throwable) {
+                finishSearchCall(call)
+            }
         })
     }
 
@@ -1406,5 +1495,6 @@ class SearchActivity : AppCompatActivity() {
         private const val PLAYLIST_TYPE_M3U = "m3u"
         private const val KEY_M3U_URL = "m3u_url"
         private const val MAX_M3U_SEARCH_RESULTS = 120
+        private const val SEARCH_CATEGORY_CONCURRENCY = 2
     }
 }
