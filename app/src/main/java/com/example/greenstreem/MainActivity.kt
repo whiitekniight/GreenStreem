@@ -5590,7 +5590,6 @@ class MainActivity : FragmentActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 if (currentState == UiState.EPG_GRID) {
                     if (currentMode == ContentMode.LIVE_TV) {
-                        if ((event?.repeatCount ?: 0) > 0) return true
                         suppressEpgUiUpdatesTemporarily()
                         if (moveEpgFocus(true)) return true
                     } else if (movePosterFocusVertically(true)) {
@@ -5605,7 +5604,6 @@ class MainActivity : FragmentActivity() {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 if (currentState == UiState.EPG_GRID) {
                     if (currentMode == ContentMode.LIVE_TV) {
-                        if ((event?.repeatCount ?: 0) > 0) return true
                         suppressEpgUiUpdatesTemporarily()
                         if (moveEpgFocus(false)) return true
                     } else if (movePosterFocusVertically(false)) {

@@ -1,7 +1,7 @@
 {
-  "versionCode": 79,
-  "versionName": "1.9.43",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.43",
-  "notes": "Improves onn and Android TV navigation with a stable compact EPG, full-height group rail, instant Movies and Series poster-row focus, clean grid clipping, clearer focus rings, smoother details loading, and sharper landscape artwork."
+  "versionCode": 80,
+  "versionName": "1.9.44",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.44",
+  "notes": "Restores smooth continuous EPG scrolling when holding the remote Up or Down button while keeping stable row-by-row focus navigation."
 }
 
