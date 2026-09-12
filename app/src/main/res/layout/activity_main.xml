@@ -120,7 +120,7 @@
                 android:id="@+id/ivVodBackdrop"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
-                android:alpha="0.92"
+                android:alpha="1"
                 android:background="#000000"
                 android:scaleType="centerCrop"
                 android:visibility="gone"
@@ -144,7 +144,7 @@
                 android:id="@+id/vVodBackdropShade"
                 android:layout_width="0dp"
                 android:layout_height="0dp"
-                android:background="#8C12161D"
+                android:background="#4012161D"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -341,7 +341,9 @@
                         android:id="@+id/tvLibraryCategoryCount"
                         android:layout_width="match_parent"
                         android:layout_height="28dp"
-                        android:background="#00000000"
+                        android:background="@color/tivimate_background"
+                        android:elevation="24dp"
+                        android:translationZ="24dp"
                         android:gravity="center_vertical"
                         android:paddingStart="18dp"
                         android:paddingEnd="18dp"
@@ -374,7 +376,7 @@
                     </HorizontalScrollView>
 
                     <!-- 3. EPG Grid (Channels) -->
-                    <androidx.recyclerview.widget.RecyclerView
+                    <com.example.greenstreem.FocusStableRecyclerView
                         android:id="@+id/rvEpg"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"

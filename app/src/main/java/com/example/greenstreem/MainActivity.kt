@@ -187,8 +187,8 @@ class MainActivity : FragmentActivity() {
         .dontAnimate()
     private val libraryBackdropOptions = RequestOptions()
         .format(DecodeFormat.PREFER_ARGB_8888)
-        .diskCacheStrategy(DiskCacheStrategy.ALL)
-        .override(1280, 720)
+        .diskCacheStrategy(DiskCacheStrategy.DATA)
+        .override(1920, 1080)
         .dontAnimate()
     private val miniInfoHandler = Handler(Looper.getMainLooper())
     private var miniInfoRunnable: Runnable? = null
@@ -298,7 +298,7 @@ class MainActivity : FragmentActivity() {
     private var pendingEpgRefresh = false
     private var pendingEpgRefreshUserRequested = false
     private var isChannelVisibilityEditMode = false
-    private val epgPxPerMinute = 10
+    private val epgPxPerMinute = 7
     private var suppressPlayingIndicatorUpdatesUntilMs = 0L
     private var visibilityEditOriginalState: UiState = UiState.EPG_GRID
     private var visibilityEditChannels: List<Channel> = emptyList()
@@ -413,8 +413,8 @@ class MainActivity : FragmentActivity() {
         onFocus = { item, position -> 
             lastGridPosition = position
             updateLibraryPositionCount()
-            requestVodInfoUpdate(item)
-            prefetchLibraryDetailsAround(position)
+            // Keep DPAD movement light. Artwork/details load only after focus settles.
+            requestVodInfoUpdate(item, delayMs = 220L)
         },
         onLongClick = { item -> showVodOptions(item) },
         onResolveMoviePoster = { movie -> requestMoviePosterForGrid(movie) }
@@ -2249,8 +2249,11 @@ class MainActivity : FragmentActivity() {
 
     private fun updateLibraryHeaderChrome() {
         val libraryMode = currentMode != ContentMode.LIVE_TV
+        val liveGroupRailVisible = currentMode == ContentMode.LIVE_TV &&
+            (currentState == UiState.CATEGORIES || currentState == UiState.NAV_RAIL)
         val compactLibraryMode = libraryMode && !isTvUiMode()
-        val categoryWidth = dp(300)
+        val categoryWidth = dp(if (isTvUiMode()) 280 else 300)
+        val liveCategoryWidth = categoryDefaultWidthPx.takeIf { it > 0 } ?: dp(180)
         val topHeight = if (libraryMode && vodInlineActionsActive) {
             (resources.displayMetrics.heightPixels - dp(28)).coerceAtLeast(dp(420))
         } else if (libraryMode) {
@@ -2304,13 +2307,19 @@ class MainActivity : FragmentActivity() {
         pbProgramProgress?.visibility = View.GONE
         topInfo.layoutParams = (topInfo.layoutParams as ConstraintLayout.LayoutParams).apply {
             height = topHeight
-            marginStart = if (libraryMode && currentState == UiState.CATEGORIES) categoryWidth else 0
+            marginStart = if (libraryMode && currentState == UiState.CATEGORIES) {
+                categoryWidth
+            } else if (liveGroupRailVisible) {
+                liveCategoryWidth
+            } else {
+                0
+            }
         }
         rvCategories.layoutParams = rvCategories.layoutParams.apply {
             width = if (libraryMode) categoryWidth else categoryDefaultWidthPx.takeIf { it > 0 } ?: dp(180)
         }
         mainContentArea.layoutParams = (mainContentArea.layoutParams as ConstraintLayout.LayoutParams).apply {
-            if (libraryMode && !vodInlineActionsActive) {
+            if ((libraryMode && !vodInlineActionsActive) || liveGroupRailVisible) {
                 topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 topToBottom = ConstraintLayout.LayoutParams.UNSET
             } else {
@@ -2320,14 +2329,33 @@ class MainActivity : FragmentActivity() {
         }
         mainContentArea.visibility = if (libraryMode && vodInlineActionsActive) View.GONE else View.VISIBLE
         libraryGridRestTopPx = if (libraryMode && !vodInlineActionsActive) {
+            // Leave the category/grid heading above the clipped poster viewport.
             (topHeight - dp(96)).coerceAtLeast(0)
         } else {
             0
         }
-        rightPanel.setPadding(0, libraryGridRestTopPx, 0, 0)
+        rightPanel.setPadding(0, 0, 0, 0)
+        val gridViewportTop = if (liveGroupRailVisible) topHeight else libraryGridRestTopPx
+        (rightPanel as? ViewGroup)?.getChildAt(0)?.let { content ->
+            content.layoutParams = (content.layoutParams as FrameLayout.LayoutParams).apply {
+                topMargin = gridViewportTop
+            }
+        }
+        // Movies/Series use a true lower viewport like TiviMate. Both parents
+        // must clip at the padded content edge or recycled poster rows can draw
+        // upward through the backdrop/details header while scrolling.
+        (rightPanel as? ViewGroup)?.apply {
+            clipChildren = libraryMode
+            clipToPadding = libraryMode
+        }
+        (mainContentArea as? ViewGroup)?.clipChildren = libraryMode
         rvCategories.setPadding(
             rvCategories.paddingLeft,
-            if (libraryMode) dp(88) else dp(8),
+            when {
+                libraryMode -> dp(88)
+                liveGroupRailVisible -> dp(18)
+                else -> dp(8)
+            },
             rvCategories.paddingRight,
             rvCategories.paddingBottom
         )
@@ -4646,7 +4674,7 @@ class MainActivity : FragmentActivity() {
                                 if (info != null) vodDetailsCache[item.streamId] = info
                                 loadLibraryArtwork(
                                     posterUrl = info?.movieIcon ?: item.streamIcon,
-                                    backdropUrl = firstArtworkUrl(info?.backdropPath) ?: info?.movieIcon ?: item.streamIcon
+                                    backdropUrl = firstArtworkUrl(info?.backdropPath)
                                 )
                                 tvProgramDescription.text = buildLibraryDescription(
                                     plot = info?.plot,
@@ -4710,7 +4738,7 @@ class MainActivity : FragmentActivity() {
                                 if (info != null) seriesDetailsCache[item.seriesId] = info
                                 loadLibraryArtwork(
                                     posterUrl = info?.cover ?: item.cover,
-                                    backdropUrl = firstArtworkUrl(info?.backdropPath) ?: info?.cover ?: item.cover
+                                    backdropUrl = firstArtworkUrl(info?.backdropPath)
                                 )
                                 tvProgramDescription.text = buildLibraryDescription(
                                     plot = info?.plot,
@@ -4768,13 +4796,11 @@ class MainActivity : FragmentActivity() {
                 tvProgramTitleLarge.text = item.name
                 tvProgramDescription.text = if (item.directUrl != null) "M3U video" else "Movie"
                 tvProgramTimeRange.text = item.containerExtension?.uppercase(Locale.getDefault()).orEmpty()
-                loadLibraryArtwork(item.streamIcon)
             }
             is XtreamSeries -> {
                 tvProgramTitleLarge.text = item.name
                 tvProgramDescription.text = "Series"
                 tvProgramTimeRange.text = ""
-                loadLibraryArtwork(item.cover)
             }
         }
     }
@@ -4933,15 +4959,16 @@ class MainActivity : FragmentActivity() {
             .error(android.R.drawable.ic_menu_report_image)
             .apply(libraryPosterOptions)
             .into(ivVodPoster)
-        Glide.with(this)
-            .load(backdropUrl)
-            .placeholder(ivVodBackdrop.drawable ?: getDrawable(android.R.drawable.ic_menu_report_image))
-            .error(android.R.drawable.ic_menu_report_image)
-            .apply(libraryBackdropOptions)
-            .let { request ->
-                if (isTvUiMode()) request.centerCrop() else request.dontTransform()
-            }
-            .into(ivVodBackdrop)
+        if (!backdropUrl.isNullOrBlank()) {
+            Glide.with(this)
+                .load(backdropUrl)
+                .placeholder(ivVodBackdrop.drawable)
+                .apply(libraryBackdropOptions)
+                .let { request ->
+                    if (isTvUiMode()) request.centerCrop() else request.dontTransform()
+                }
+                .into(ivVodBackdrop)
+        }
     }
 
     private fun playMedia(url: String, title: String, targetState: UiState? = UiState.FULL_SCREEN) {
@@ -5219,7 +5246,7 @@ class MainActivity : FragmentActivity() {
     private fun applyVodDetails(item: XtreamVodStream, info: XtreamVodDetailsInfo) {
         loadLibraryArtwork(
             posterUrl = info.movieIcon ?: item.streamIcon,
-            backdropUrl = firstArtworkUrl(info.backdropPath) ?: info.movieIcon ?: item.streamIcon
+            backdropUrl = firstArtworkUrl(info.backdropPath)
         )
         tvProgramDescription.text = buildLibraryDescription(info.plot, info.cast, info.director)
         tvProgramTimeRange.text = buildLibraryMetaLine(info.rating, info.releaseDate, info.duration, info.genre)
@@ -5230,7 +5257,7 @@ class MainActivity : FragmentActivity() {
     private fun applySeriesDetails(item: XtreamSeries, info: XtreamSeriesDetailsInfo) {
         loadLibraryArtwork(
             posterUrl = info.cover ?: item.cover,
-            backdropUrl = firstArtworkUrl(info.backdropPath) ?: info.cover ?: item.cover
+            backdropUrl = firstArtworkUrl(info.backdropPath)
         )
         tvProgramDescription.text = buildLibraryDescription(info.plot, info.cast, info.director)
         tvProgramTimeRange.text = buildLibraryMetaLine(info.rating, info.releaseDate, null, info.genre)
@@ -5255,6 +5282,11 @@ class MainActivity : FragmentActivity() {
             hideInlineVodActions(restoreGrid = false)
         }
         currentState = newState
+        if (currentMode == ContentMode.LIVE_TV) {
+            (rvContent as? FocusStableRecyclerView)?.suppressFocusDrivenScroll = false
+            rvContent.clipChildren = true
+            rvContent.clipToPadding = true
+        }
         saveCurrentUiState(newState)
         updateLibraryHeaderChrome()
         if (newState != UiState.FULL_SCREEN) {
@@ -5558,8 +5590,11 @@ class MainActivity : FragmentActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 if (currentState == UiState.EPG_GRID) {
                     if (currentMode == ContentMode.LIVE_TV) {
+                        if ((event?.repeatCount ?: 0) > 0) return true
                         suppressEpgUiUpdatesTemporarily()
                         if (moveEpgFocus(true)) return true
+                    } else if (movePosterFocusVertically(true)) {
+                        return true
                     }
                 } else {
                     if (handleDpadWrapping(true)) return true
@@ -5570,8 +5605,11 @@ class MainActivity : FragmentActivity() {
             KeyEvent.KEYCODE_DPAD_UP -> {
                 if (currentState == UiState.EPG_GRID) {
                     if (currentMode == ContentMode.LIVE_TV) {
+                        if ((event?.repeatCount ?: 0) > 0) return true
                         suppressEpgUiUpdatesTemporarily()
                         if (moveEpgFocus(false)) return true
+                    } else if (movePosterFocusVertically(false)) {
+                        return true
                     }
                 } else {
                     if (handleDpadWrapping(false)) return true
@@ -5997,12 +6035,18 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun calculatePosterSpanCount(): Int {
+        if (isTvUiMode()) return 7
         val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
         return (widthDp / 150f).toInt().coerceIn(5, 8)
     }
 
     private fun ensurePosterLayout() {
         val shouldUseGrid = currentMode != ContentMode.LIVE_TV && currentState == UiState.EPG_GRID
+        (rvContent as? FocusStableRecyclerView)?.suppressFocusDrivenScroll = true
+        // Keep scrolled poster rows inside the grid so they cannot cover the
+        // backdrop/details header. The smaller focus zoom fits inside row spacing.
+        rvContent.clipChildren = true
+        rvContent.clipToPadding = false
         val currentLayout = rvContent.layoutManager
         val layoutMatches = if (shouldUseGrid) {
             currentLayout is GridLayoutManager
@@ -6076,6 +6120,31 @@ class MainActivity : FragmentActivity() {
                 rvContent.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus()
             }
         }
+    }
+
+    private fun movePosterFocusVertically(down: Boolean): Boolean {
+        val layout = rvContent.layoutManager as? GridLayoutManager ?: return false
+        val focused = currentFocus ?: return false
+        val holder = rvContent.findContainingViewHolder(focused) ?: return false
+        val current = holder.bindingAdapterPosition
+        if (current == RecyclerView.NO_POSITION) return false
+        val target = current + if (down) layout.spanCount else -layout.spanCount
+        val count = rvContent.adapter?.itemCount ?: return false
+        if (target !in 0 until count) return false
+
+        lastGridPosition = target
+        // Snap the destination row into place before transferring focus. This
+        // avoids Android's visible focus-driven smooth scroll between rows.
+        rvContent.stopScroll()
+        val destinationRowStart = target - (target % layout.spanCount)
+        layout.scrollToPositionWithOffset(destinationRowStart, 0)
+        rvContent.post {
+            rvContent.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus()
+                ?: rvContent.postDelayed({
+                    rvContent.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus()
+                }, 32L)
+        }
+        return true
     }
 
     private fun onCategoryFocused(category: XtreamCategory) {
@@ -6569,9 +6638,6 @@ class MainActivity : FragmentActivity() {
         // returns to the live guide. Cached rows exit quickly inside fetchRowEpg().
         enqueueEpgForChannels(currentLiveChannels)
         maybeRunPendingEpgRefresh()
-        if (row != -1) {
-            rvContent.post { focusEpgRowAt(row) }
-        }
         rvContent.postDelayed({
             if (currentState == UiState.EPG_GRID) {
                 guideFullscreenReturnChannelId = null

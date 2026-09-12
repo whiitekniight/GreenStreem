@@ -100,7 +100,8 @@ class PosterAdapter(
 
         holder.itemView.isFocusable = true
         holder.itemView.isLongClickable = true
-        holder.itemView.setBackgroundResource(R.drawable.selector_poster_bg)
+        holder.itemView.background = null
+        holder.itemView.foreground = AppearanceTheme.posterBackground(holder.itemView.context)
         
         holder.itemView.setOnClickListener {
             val pos = holder.bindingAdapterPosition
@@ -121,12 +122,10 @@ class PosterAdapter(
             if (hasFocus) {
                 holder.tvTitle.isSelected = true
                 holder.itemView.alpha = 1f
-                holder.itemView.animate()
-                    .scaleX(1.08f)
-                    .scaleY(1.08f)
-                    .translationZ(12f)
-                    .setDuration(120)
-                    .start()
+                holder.itemView.animate().cancel()
+                holder.itemView.scaleX = 1f
+                holder.itemView.scaleY = 1f
+                holder.itemView.translationZ = 12f
                 val pos = holder.bindingAdapterPosition
                 if (pos != RecyclerView.NO_POSITION) {
                     getItemAt(pos)?.let { currentItem -> onFocus(currentItem, pos) }
@@ -134,12 +133,10 @@ class PosterAdapter(
             } else {
                 holder.tvTitle.isSelected = false
                 holder.itemView.alpha = 0.92f
-                holder.itemView.animate()
-                    .scaleX(1.0f)
-                    .scaleY(1.0f)
-                    .translationZ(0f)
-                    .setDuration(120)
-                    .start()
+                holder.itemView.animate().cancel()
+                holder.itemView.scaleX = 1f
+                holder.itemView.scaleY = 1f
+                holder.itemView.translationZ = 0f
             }
         }
     }

@@ -64,6 +64,24 @@ object AppearanceTheme {
         }
     }
 
+    fun posterBackground(context: Context): StateListDrawable {
+        val focused = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = context.dp(4).toFloat()
+            setColor(Color.TRANSPARENT)
+            setStroke(context.dp(5), accentColor(context))
+        }
+        val normal = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = context.dp(8).toFloat()
+            setColor(Color.TRANSPARENT)
+        }
+        return StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_focused), focused)
+            addState(intArrayOf(), normal)
+        }
+    }
+
     fun categoryBackground(context: Context): StateListDrawable {
         val focused = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
