@@ -92,7 +92,7 @@ class SearchActivity : AppCompatActivity() {
         onChannelClick = { channel -> playChannel(channel) },
         onChannelLongClick = { channel -> showChannelActions(channel) },
         onProgramClick = { result -> playChannel(result.channel) },
-        onMovieClick = { movie -> showMovieActions(movie) },
+        onMovieClick = { movie -> openMovieDetails(movie) },
         onMovieLongClick = { movie -> showMovieActions(movie) },
         onSeriesClick = { series -> openSeries(series) },
         onSeriesLongClick = { series -> showSeriesActions(series) },
@@ -1184,35 +1184,48 @@ class SearchActivity : AppCompatActivity() {
 
         private fun verticalFocusablePosition(position: Int, down: Boolean): Int {
             if (position !in items.indices) return RecyclerView.NO_POSITION
-            val step = if (isPosterItem(items[position])) SEARCH_GRID_SPAN_COUNT else 1
-            val firstCandidate = position + if (down) step else -step
-            val boundaryRange = if (down) {
-                (position + 1)..firstCandidate.coerceAtMost(items.lastIndex)
-            } else {
-                (position - 1) downTo firstCandidate.coerceAtLeast(0)
-            }
-            val crossesSection = boundaryRange.any { it in items.indices && items[it] is String }
-            if (crossesSection) {
-                val sectionRange = if (down) {
-                    (position + 1)..items.lastIndex
-                } else {
-                    (position - 1) downTo 0
-                }
-                return sectionRange.firstOrNull { it in items.indices && items[it] !is String }
+            if (!isPosterItem(items[position])) {
+                val range = if (down) (position + 1)..items.lastIndex else (position - 1) downTo 0
+                return range.firstOrNull { it in items.indices && items[it] !is String }
                     ?: RecyclerView.NO_POSITION
             }
-            val range = if (down) {
-                firstCandidate..items.lastIndex
+
+            // Headers occupy a complete GridLayoutManager row, so raw adapter
+            // positions are not reliable poster columns. Work only within this
+            // poster section and preserve the poster's visual column.
+            val sectionStart = ((position downTo 0).firstOrNull { items[it] is String } ?: -1) + 1
+            val sectionEnd = ((position + 1)..items.lastIndex)
+                .firstOrNull { items[it] is String }
+                ?.minus(1)
+                ?: items.lastIndex
+            val sectionOffset = position - sectionStart
+            val column = sectionOffset % SEARCH_GRID_SPAN_COUNT
+            val sameSectionTarget = position + if (down) SEARCH_GRID_SPAN_COUNT else -SEARCH_GRID_SPAN_COUNT
+            if (sameSectionTarget in sectionStart..sectionEnd) return sameSectionTarget
+
+            val adjacentStart: Int
+            val adjacentEnd: Int
+            if (down) {
+                val nextHeader = sectionEnd + 1
+                if (nextHeader !in items.indices || items[nextHeader] !is String) return RecyclerView.NO_POSITION
+                adjacentStart = nextHeader + 1
+                adjacentEnd = (adjacentStart..items.lastIndex)
+                    .firstOrNull { items[it] is String }
+                    ?.minus(1)
+                    ?: items.lastIndex
             } else {
-                firstCandidate downTo 0
+                adjacentEnd = sectionStart - 2
+                if (adjacentEnd < 0) return RecyclerView.NO_POSITION
+                adjacentStart = ((adjacentEnd downTo 0).firstOrNull { items[it] is String } ?: -1) + 1
             }
-            return range.firstOrNull { it in items.indices && items[it] !is String }
-                ?: if (down) {
-                    ((position + 1)..items.lastIndex).firstOrNull { items[it] !is String }
-                } else {
-                    ((position - 1) downTo 0).firstOrNull { items[it] !is String }
-                }
-                ?: RecyclerView.NO_POSITION
+            if (adjacentStart > adjacentEnd) return RecyclerView.NO_POSITION
+
+            return if (down) {
+                (adjacentStart + column).coerceAtMost(adjacentEnd)
+            } else {
+                val lastRowStart = adjacentStart + ((adjacentEnd - adjacentStart) / SEARCH_GRID_SPAN_COUNT) * SEARCH_GRID_SPAN_COUNT
+                (lastRowStart + column).coerceAtMost(adjacentEnd)
+            }
         }
 
         private fun isPosterItem(item: Any): Boolean {
@@ -1487,5 +1500,21 @@ class SearchActivity : AppCompatActivity() {
         private const val KEY_M3U_URL = "m3u_url"
         private const val MAX_M3U_SEARCH_RESULTS = 120
         private const val SEARCH_CATEGORY_CONCURRENCY = 2
+    }
+
+    private fun openMovieDetails(movie: XtreamVodStream) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            putExtra("show_movie_details", true)
+            putExtra("movie_num", movie.num)
+            putExtra("movie_name", movie.name)
+            putExtra("movie_stream_id", movie.streamId)
+            putExtra("movie_stream_icon", movie.streamIcon)
+            putExtra("movie_category_id", movie.categoryId)
+            putExtra("movie_container_extension", movie.containerExtension)
+            putExtra("movie_direct_url", movie.directUrl)
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        startActivity(intent)
+        finish()
     }
 }

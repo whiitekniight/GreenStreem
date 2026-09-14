@@ -81,7 +81,9 @@ class CategoryAdapter(
                     .setDuration(150)
                     .start()
                 val pos = holder.bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION) onCategoryFocus(items[pos], pos)
+                if (pos != RecyclerView.NO_POSITION) {
+                    onCategoryFocus(items[pos], pos)
+                }
             } else {
                 holder.itemView.animate()
                     .scaleX(1.0f)

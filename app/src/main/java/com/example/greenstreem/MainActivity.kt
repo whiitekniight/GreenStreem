@@ -247,6 +247,7 @@ class MainActivity : FragmentActivity() {
     private var suppressBackToCategoriesUntilMs = 0L
     private var suppressCategoriesToNavUntilMs = 0L
     private var suppressCategoriesToGridUntilMs = 0L
+    private var preserveCategoryFocusOnNextCategories = false
 
     // In-memory caches
     private var cachedRawCategories: List<XtreamCategory>? = null
@@ -414,7 +415,12 @@ class MainActivity : FragmentActivity() {
             lastGridPosition = position
             updateLibraryPositionCount()
             // Keep DPAD movement light. Artwork/details load only after focus settles.
-            requestVodInfoUpdate(item, delayMs = 220L)
+            requestVodInfoUpdate(item, delayMs = 70L)
+            vodInfoHandler.postDelayed({
+                if (currentMode != ContentMode.LIVE_TV && lastGridPosition == position) {
+                    prefetchLibraryDetailsAround(position)
+                }
+            }, 350L)
         },
         onLongClick = { item -> showVodOptions(item) },
         onResolveMoviePoster = { movie -> requestMoviePosterForGrid(movie) }
@@ -605,7 +611,9 @@ class MainActivity : FragmentActivity() {
 
         @Suppress("DEPRECATION")
         val playChannelExtra = intent.getSerializableExtra("play_channel") as? Channel
-        val startedInitialPlayback = if (playChannelExtra != null) {
+        val startedInitialPlayback = if (handleSearchMovieDetailsIntent(intent)) {
+            false
+        } else if (playChannelExtra != null) {
             playChannel(playChannelExtra)
             true
         } else if (handleExternalPlaybackIntent(intent)) {
@@ -682,7 +690,9 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleExternalPlaybackIntent(intent)
+        if (!handleSearchMovieDetailsIntent(intent)) {
+            handleExternalPlaybackIntent(intent)
+        }
     }
 
     override fun onUserLeaveHint() {
@@ -1936,7 +1946,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun setupNavRail() {
-        findViewById<View>(R.id.navSearch)?.setOnClickListener { launchInternalActivity(Intent(this, SearchActivity::class.java)) }
+        findViewById<View>(R.id.navSearch)?.setOnClickListener { launchSearchActivity() }
         findViewById<View>(R.id.navTv)?.setOnClickListener {
             if (currentMode == ContentMode.LIVE_TV) {
                 enterLiveGuideAtCurrentChannel()
@@ -1955,6 +1965,14 @@ class MainActivity : FragmentActivity() {
         muteForInternalActivity()
         postInternalActivityMutePasses()
         startActivity(intent)
+    }
+
+    private fun launchSearchActivity() {
+        player?.pause()
+        launchInternalActivity(Intent(this, SearchActivity::class.java))
+        hoverHandler.postDelayed({
+            if (suppressExitOnUserLeaveHint) player?.pause()
+        }, 250L)
     }
 
     private fun muteForInternalActivity() {
@@ -2215,8 +2233,8 @@ class MainActivity : FragmentActivity() {
         saveCurrentMode(mode)
         updateLibraryHeaderChrome()
         refreshRecentChannelsRow()
-        fetchCategories(autoSelectFirst = true)
         updateUiState(UiState.CATEGORIES)
+        fetchCategories(autoSelectFirst = true)
         if (mode == ContentMode.LIVE_TV) {
             resumeCurrentLivePlaybackAfterModeSwitch()
         }
@@ -4654,7 +4672,7 @@ class MainActivity : FragmentActivity() {
                     if (token == vodInfoRequestToken && tvProgramDescription.text.toString() == "Movie") {
                         loadLibraryArtwork(item.streamIcon)
                     }
-                }, 250L)
+                }, 80L)
                 if (item.directUrl != null) {
                     tvProgramDescription.text = "M3U video"
                     tvProgramTimeRange.text = item.categoryId ?: ""
@@ -4663,7 +4681,7 @@ class MainActivity : FragmentActivity() {
                     vodInfoRunnable = Runnable {
                         if (token == vodInfoRequestToken) loadLibraryArtwork(item.streamIcon)
                     }
-                    vodInfoHandler.postDelayed(vodInfoRunnable!!, 180L)
+                    vodInfoHandler.postDelayed(vodInfoRunnable!!, 35L)
                     return
                 }
                 vodDetailsCache[item.streamId]?.let { info ->
@@ -4674,7 +4692,7 @@ class MainActivity : FragmentActivity() {
                     vodInfoRunnable = Runnable {
                         if (token == vodInfoRequestToken) loadLibraryArtwork(item.streamIcon)
                     }
-                    vodInfoHandler.postDelayed(vodInfoRunnable!!, 180L)
+                    vodInfoHandler.postDelayed(vodInfoRunnable!!, 35L)
                     return
                 }
                 vodInfoRunnable = Runnable {
@@ -4715,7 +4733,7 @@ class MainActivity : FragmentActivity() {
                         }
                     })
                 }
-                vodInfoHandler.postDelayed(vodInfoRunnable!!, 180L)
+                vodInfoHandler.postDelayed(vodInfoRunnable!!, 35L)
                 vodInfoHandler.postDelayed({
                     if (token == vodInfoRequestToken && tvProgramDescription.text.toString() == "Loading details...") {
                         tvProgramDescription.text = "Movie details unavailable"
@@ -4729,7 +4747,7 @@ class MainActivity : FragmentActivity() {
                     if (token == vodInfoRequestToken && tvProgramDescription.text.toString() == "Series") {
                         loadLibraryArtwork(item.cover)
                     }
-                }, 250L)
+                }, 80L)
                 seriesDetailsCache[item.seriesId]?.let { info ->
                     applySeriesDetails(item, info)
                     return
@@ -4738,7 +4756,7 @@ class MainActivity : FragmentActivity() {
                     vodInfoRunnable = Runnable {
                         if (token == vodInfoRequestToken) loadLibraryArtwork(item.cover)
                     }
-                    vodInfoHandler.postDelayed(vodInfoRunnable!!, 180L)
+                    vodInfoHandler.postDelayed(vodInfoRunnable!!, 35L)
                     return
                 }
                 vodInfoRunnable = Runnable {
@@ -4779,7 +4797,7 @@ class MainActivity : FragmentActivity() {
                         }
                     })
                 }
-                vodInfoHandler.postDelayed(vodInfoRunnable!!, 180L)
+                vodInfoHandler.postDelayed(vodInfoRunnable!!, 35L)
                 vodInfoHandler.postDelayed({
                     if (token == vodInfoRequestToken && tvProgramDescription.text.toString() == "Loading details...") {
                         tvProgramDescription.text = "Series details unavailable"
@@ -4789,7 +4807,7 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun requestVodInfoUpdate(item: Any, delayMs: Long = 100L) {
+    private fun requestVodInfoUpdate(item: Any, delayMs: Long = 60L) {
         vodInfoStartRunnable?.let { vodInfoHandler.removeCallbacks(it) }
         vodInfoRunnable?.let { vodInfoHandler.removeCallbacks(it) }
         currentVodInfoCall?.cancel()
@@ -5236,6 +5254,27 @@ class MainActivity : FragmentActivity() {
         return true
     }
 
+    private fun handleSearchMovieDetailsIntent(intent: Intent?): Boolean {
+        if (intent?.getBooleanExtra("show_movie_details", false) != true) return false
+
+        val streamId = intent.getIntExtra("movie_stream_id", -1)
+        val name = intent.getStringExtra("movie_name").orEmpty()
+        if (streamId <= 0 || name.isBlank()) return false
+
+        val movie = XtreamVodStream(
+            num = intent.getIntExtra("movie_num", 0),
+            name = name,
+            streamId = streamId,
+            streamIcon = intent.getStringExtra("movie_stream_icon"),
+            categoryId = intent.getStringExtra("movie_category_id"),
+            containerExtension = intent.getStringExtra("movie_container_extension"),
+            directUrl = intent.getStringExtra("movie_direct_url")
+        )
+        intent.removeExtra("show_movie_details")
+        showVodOptions(movie)
+        return true
+    }
+
     private fun configureSeriesQueue(intent: Intent?, resumeKey: String) {
         val urls = intent?.getStringArrayListExtra(EXTRA_SERIES_EPISODE_URLS).orEmpty()
         val titles = intent?.getStringArrayListExtra(EXTRA_SERIES_EPISODE_TITLES).orEmpty()
@@ -5371,7 +5410,11 @@ class MainActivity : FragmentActivity() {
                 updateRecentChannelsVisibility()
                 rvCategories.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                 rvContent.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                alignLiveCategorySelectionToPlayback()
+                if (preserveCategoryFocusOnNextCategories) {
+                    preserveCategoryFocusOnNextCategories = false
+                } else {
+                    alignLiveCategorySelectionToPlayback()
+                }
                 
                 epgAdapter.focusedRowPosition = RecyclerView.NO_POSITION
                 rvCategories.post {
@@ -5381,10 +5424,7 @@ class MainActivity : FragmentActivity() {
                         scrollCategoryPositionToTop(lastCategoryPosition, requestFocus = true)
                         return@post
                     }
-                    rvCategories.post {
-                        rvCategories.findViewHolderForAdapterPosition(lastCategoryPosition)?.itemView?.requestFocus()
-                            ?: rvCategories.requestFocus()
-                    }
+                    restoreCategoryFocus(lastCategoryPosition)
                 }
             }
             UiState.NAV_RAIL -> {
@@ -5403,8 +5443,23 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun returnToCategoriesOnly() {
+        preserveCategoryFocusOnNextCategories = true
         suppressCategoriesToNavUntilMs = System.currentTimeMillis() + 350L
         updateUiState(UiState.CATEGORIES)
+    }
+
+    private fun restoreCategoryFocus(position: Int, attempt: Int = 0) {
+        val count = categoryAdapter.itemCount
+        if (count <= 0 || currentState != UiState.CATEGORIES) return
+        val target = position.coerceIn(0, count - 1)
+        val row = rvCategories.findViewHolderForAdapterPosition(target)?.itemView
+        if (row?.requestFocus() == true) return
+        (rvCategories.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(target, 0)
+        if (attempt < 4) {
+            rvCategories.postDelayed({ restoreCategoryFocus(target, attempt + 1) }, 45L)
+        } else {
+            rvCategories.requestFocus()
+        }
     }
 
     private fun movePlayerToContainer(newContainer: ViewGroup) {
@@ -5550,23 +5605,18 @@ class MainActivity : FragmentActivity() {
                 if (currentState == UiState.EPG_GRID) {
                     if (currentMode == ContentMode.LIVE_TV) {
                         val focused = currentFocus
-                        val canMoveLeftInRow = focused?.let { current ->
-                            val nextLeft = current.focusSearch(View.FOCUS_LEFT)
-                            nextLeft != null && nextLeft !== current &&
-                                rvContent.findContainingItemView(nextLeft) == rvContent.findContainingItemView(current)
-                        } == true
+                        val canMoveLeftInRow = focused?.let(::hasFocusableProgramToLeft) == true
                         if (canMoveLeftInRow) {
                             return false
                         }
-                        if (guideFullscreenReturnChannelId != null ||
-                            System.currentTimeMillis() < suppressBackToCategoriesUntilMs
-                        ) {
+                        if (System.currentTimeMillis() < suppressBackToCategoriesUntilMs) {
                             currentChannel?.id
                                 ?.let { epgAdapter.getPositionForChannelId(it) }
                                 ?.takeIf { it != RecyclerView.NO_POSITION }
                                 ?.let { focusEpgRowAt(it) }
                             return true
                         }
+                        guideFullscreenReturnChannelId = null
                         persistCurrentLiveFocusedRowForCurrentCategory()
                         returnToCategoriesOnly()
                         return true
@@ -5582,8 +5632,8 @@ class MainActivity : FragmentActivity() {
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (currentState == UiState.NAV_RAIL) {
-                    alignLiveCategorySelectionToPlayback()
-                    returnToPlayingChannelOnNextGridOpen = (currentMode == ContentMode.LIVE_TV)
+                    preserveCategoryFocusOnNextCategories = true
+                    returnToPlayingChannelOnNextGridOpen = false
                     suppressCategoriesToGridUntilMs = System.currentTimeMillis() + 350L
                     updateUiState(UiState.CATEGORIES)
                     return true
@@ -5850,6 +5900,21 @@ class MainActivity : FragmentActivity() {
         val pos = rvContent.getChildAdapterPosition(rowView)
         if (pos == RecyclerView.NO_POSITION) return null
         return posterAdapter.getItemAt(pos)
+    }
+
+    private fun hasFocusableProgramToLeft(focused: View): Boolean {
+        val container = focused.parent as? ViewGroup ?: return false
+        if (container.id != R.id.programsContainer) return false
+        val focusedIndex = container.indexOfChild(focused)
+        if (focusedIndex <= 0) return false
+        return (0 until focusedIndex).any { index ->
+            val candidate = container.getChildAt(index)
+            val visibleBounds = android.graphics.Rect()
+            candidate.visibility == View.VISIBLE &&
+                candidate.isFocusable &&
+                candidate.getGlobalVisibleRect(visibleBounds) &&
+                visibleBounds.width() >= dp(24)
+        }
     }
 
     private fun isFocusedPosterInLeftmostColumn(): Boolean {

@@ -146,16 +146,12 @@ class EpgRowAdapter(
     fun setEpgData(streamId: Int, listings: List<XtreamEpgListing>) {
         val existing = channelPrograms[streamId]
         if (existing == listings) return
-        val shouldForceFocusedRefresh = existing.isNullOrEmpty() && listings.isNotEmpty()
 
         channelPrograms[streamId] = listings
         val pos = channels.indexOfFirst { it.id.toInt() == streamId }
         if (pos != -1) {
-            if (pos == focusedRowPosition && !shouldForceFocusedRefresh) {
+            if (pos == focusedRowPosition) {
                 deferredFocusedRowUpdates.add(pos)
-            } else if (shouldForceFocusedRefresh) {
-                deferredFocusedRowUpdates.remove(pos)
-                notifyItemChanged(pos)
             } else {
                 notifyItemChanged(pos, "EPG_UPDATE")
             }
@@ -419,6 +415,10 @@ class EpgRowAdapter(
 
         val width = ((durationSec / 60f) * pxPerMinute).toInt().coerceAtLeast(1)
         view.layoutParams = LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT)
+        // Keep clipped timeline slivers visible, but do not make the remote stop
+        // on a card too narrow to identify or select reliably.
+        view.isFocusable = width >= view.context.dp(24)
+        view.isFocusableInTouchMode = view.isFocusable
         view.isLongClickable = true
         
         view.setOnClickListener {

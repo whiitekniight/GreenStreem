@@ -1,7 +1,7 @@
 {
-  "versionCode": 81,
-  "versionName": "1.9.45",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.45",
-  "notes": "Fixes Search navigation so every Movies row is visited before Series, and keeps sports replay catalogs out of All movies while leaving their individual categories available."
+  "versionCode": 82,
+  "versionName": "1.9.46",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.46",
+  "notes": "Improves EPG and navigation focus, restores continuous and predictable remote movement, opens full movie details from Search, keeps Search quiet, speeds up VOD details, and preserves poster columns while browsing Search results."
 }
 
