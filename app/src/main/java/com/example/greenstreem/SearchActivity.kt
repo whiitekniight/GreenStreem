@@ -1184,15 +1184,6 @@ class SearchActivity : AppCompatActivity() {
 
         private fun verticalFocusablePosition(position: Int, down: Boolean): Int {
             if (position !in items.indices) return RecyclerView.NO_POSITION
-            if (down && items[position] is XtreamVodStream) {
-                val firstSeries = ((position + 1)..items.lastIndex)
-                    .firstOrNull { items[it] is XtreamSeries }
-                if (firstSeries != null) return firstSeries
-            }
-            if (!down && items[position] is XtreamSeries) {
-                val firstMovie = items.indexOfFirst { it is XtreamVodStream }
-                if (firstMovie in 0 until position) return firstMovie
-            }
             val step = if (isPosterItem(items[position])) SEARCH_GRID_SPAN_COUNT else 1
             val firstCandidate = position + if (down) step else -step
             val boundaryRange = if (down) {

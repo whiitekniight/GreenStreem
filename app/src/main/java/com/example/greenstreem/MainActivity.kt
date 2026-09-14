@@ -3023,7 +3023,23 @@ class MainActivity : FragmentActivity() {
         }
 
         if (category.id == ALL_MOVIES_ID) {
-            val allMovies = cachedVodStreams?.values?.flatten().orEmpty().distinctBy { it.streamId }
+            val replayCategoryIds = cachedRawCategories.orEmpty()
+                .asSequence()
+                .filter { it.name.contains("replay", ignoreCase = true) }
+                .map { cleanProviderCategoryId(it.id) }
+                .filter { it.isNotBlank() }
+                .toSet()
+            val allMovies = cachedVodStreams?.values
+                ?.asSequence()
+                ?.flatten()
+                ?.distinctBy { it.streamId }
+                ?.filter { movie ->
+                    splitProviderCategoryIds(movie.categoryId.orEmpty())
+                        .map(::cleanProviderCategoryId)
+                        .none { it in replayCategoryIds }
+                }
+                ?.toList()
+                .orEmpty()
             showPosterItems(allMovies, 0)
             return
         }

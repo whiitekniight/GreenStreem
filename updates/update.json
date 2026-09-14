@@ -1,7 +1,7 @@
 {
-  "versionCode": 80,
-  "versionName": "1.9.44",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.44",
-  "notes": "Restores smooth continuous EPG scrolling when holding the remote Up or Down button while keeping stable row-by-row focus navigation."
+  "versionCode": 81,
+  "versionName": "1.9.45",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.45",
+  "notes": "Fixes Search navigation so every Movies row is visited before Series, and keeps sports replay catalogs out of All movies while leaving their individual categories available."
 }
 
