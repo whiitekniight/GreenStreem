@@ -2,7 +2,6 @@ package com.example.greenstreem
 
 import android.content.Intent
 import android.graphics.Color
-import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -236,17 +235,21 @@ class SettingsActivity : AppCompatActivity() {
     private fun renderLockedEmby() {
         addEmbyTitle("Unlock Emby Connect — $9.99 Lifetime")
         addEmbyBody(
-            "Connect your own Emby server and enjoy its Live TV, antenna channels, guide data, movies, and series—all inside GreenStreem, at home or away.\n\n" +
-                "Your Emby server must already be set up with your own TV tuner, antenna channels, media libraries, and remote access. GreenStreem does not provide channels or media—it brings the content available on your Emby server into one convenient app.\n\n" +
-                "One-time purchase. No GreenStreem subscription required."
+            "Use your own Emby server for Live TV, antenna channels, guide data, movies, and series inside GreenStreem. " +
+                "Your Emby server must already provide the channels, media, and remote access. One-time purchase; no subscription."
         )
         addEmbyLabel("Your activation ID")
         addEmbyCode(EmbyConnectEntitlement.activationId(this))
-        addEmbyBody("Keep this ID handy. Discord will ask for it when you order the add-on.")
-        addEmbyButton("Purchase on Discord") {
+        addEmbyBody("Purchase through GreenStreem Discord. Press below to send your activation ID to the private order channel; GreenStreem will stay open.")
+        addEmbyButton("Send Purchase Request — $9.99") {
             lifecycleScope.launch {
                 EmbyConnectActivationClient.submitPurchaseRequest(this@SettingsActivity)
-                openEmbyDiscordOrders()
+                    .onSuccess {
+                        Toast.makeText(this@SettingsActivity, "Request sent to GreenStreem Discord", Toast.LENGTH_LONG).show()
+                    }
+                    .onFailure {
+                        Toast.makeText(this@SettingsActivity, "Could not send request. Please try again.", Toast.LENGTH_LONG).show()
+                    }
             }
         }
         addEmbyButton("I Paid — Check Activation") { checkEmbyActivation() }
@@ -312,28 +315,22 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun openEmbyDiscordOrders() {
-        val url = "https://discord.com/channels/1495933593497767996/1513549164406116442"
-        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-            .onFailure { Toast.makeText(this, "Open GreenStreem Discord and go to #order-here", Toast.LENGTH_LONG).show() }
-    }
-
     private fun addEmbyTitle(text: String) {
         embyContent.addView(TextView(this).apply {
             this.text = text
-            textSize = 30f
+            textSize = 27f
             setTextColor(Color.WHITE)
-            setPadding(0, 0, 0, dp(18))
+            setPadding(0, 0, 0, dp(10))
         })
     }
 
     private fun addEmbyBody(text: String) {
         embyContent.addView(TextView(this).apply {
             this.text = text
-            textSize = 17f
+            textSize = 16f
             setTextColor(0xFFE7ECF4.toInt())
             setLineSpacing(0f, 1.12f)
-            setPadding(0, 0, 0, dp(14))
+            setPadding(0, 0, 0, dp(9))
         })
     }
 
@@ -342,17 +339,17 @@ class SettingsActivity : AppCompatActivity() {
             this.text = text
             textSize = 16f
             setTextColor(0xFFB8C4D8.toInt())
-            setPadding(0, dp(10), 0, dp(6))
+            setPadding(0, dp(4), 0, dp(4))
         })
     }
 
     private fun addEmbyCode(text: String) {
         embyContent.addView(TextView(this).apply {
             this.text = text
-            textSize = 23f
+            textSize = 21f
             setTextColor(AppearanceTheme.accentColor(this@SettingsActivity))
             gravity = Gravity.CENTER
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setPadding(dp(16), dp(9), dp(16), dp(9))
             background = AppearanceTheme.buttonBackground(this@SettingsActivity)
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
     }
@@ -381,8 +378,8 @@ class SettingsActivity : AppCompatActivity() {
             textSize = 17f
             background = AppearanceTheme.buttonBackground(this@SettingsActivity)
             setOnClickListener { action() }
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56)).apply {
-            topMargin = dp(8)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply {
+            topMargin = dp(6)
         })
     }
 

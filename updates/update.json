@@ -1,7 +1,7 @@
 {
-  "versionCode": 85,
-  "versionName": "1.9.49",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.49",
-  "notes": "Fixes Back navigation after GreenStreem cold-starts into the last-played Emby Live TV channel. Back now returns to Emby categories instead of closing the app. Also includes the 1.9.48 guide crash fix."
+  "versionCode": 86,
+  "versionName": "1.9.50",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.50",
+  "notes": "Improves Emby Connect purchases: the activation ID, purchase instructions, and I Paid button now stay visible together, purchase requests keep GreenStreem open, and Discord staff can approve or reject requests directly inside Discord."
 }
 

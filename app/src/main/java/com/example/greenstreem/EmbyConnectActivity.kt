@@ -2,7 +2,6 @@ package com.example.greenstreem
 
 import android.content.Intent
 import android.graphics.Color
-import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -46,17 +45,21 @@ class EmbyConnectActivity : AppCompatActivity() {
     private fun renderLocked() {
         addTitle("Unlock Emby Connect — $9.99 Lifetime")
         addBody(
-            "Connect your own Emby server and enjoy its Live TV, antenna channels, guide data, movies, and series—all inside GreenStreem, at home or away.\n\n" +
-                "Your Emby server must already be set up with your own TV tuner, antenna channels, media libraries, and remote access. GreenStreem does not provide channels or media—it brings the content available on your Emby server into one convenient app.\n\n" +
-                "One-time purchase. No GreenStreem subscription required."
+            "Use your own Emby server for Live TV, antenna channels, guide data, movies, and series inside GreenStreem. " +
+                "Your Emby server must already provide the channels, media, and remote access. One-time purchase; no subscription."
         )
         addLabel("Your activation ID")
         addCode(EmbyConnectEntitlement.activationId(this))
-        addBody("Keep this ID handy. Discord will ask for it when you order the add-on.")
-        addButton("Purchase on Discord") {
+        addBody("Purchase through GreenStreem Discord. Press below to send your activation ID to the private order channel; GreenStreem will stay open.")
+        addButton("Send Purchase Request — $9.99") {
             lifecycleScope.launch {
                 EmbyConnectActivationClient.submitPurchaseRequest(this@EmbyConnectActivity)
-                openDiscordOrders()
+                    .onSuccess {
+                        Toast.makeText(this@EmbyConnectActivity, "Request sent to GreenStreem Discord", Toast.LENGTH_LONG).show()
+                    }
+                    .onFailure {
+                        Toast.makeText(this@EmbyConnectActivity, "Could not send request. Please try again.", Toast.LENGTH_LONG).show()
+                    }
             }
         }
         addButton("I Paid — Check Activation") { checkActivation() }
@@ -123,12 +126,6 @@ class EmbyConnectActivity : AppCompatActivity() {
                     setBusy(false)
                 }
         }
-    }
-
-    private fun openDiscordOrders() {
-        val url = "https://discord.com/channels/1495933593497767996/1513549164406116442"
-        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-            .onFailure { Toast.makeText(this, "Open GreenStreem Discord and go to #order-here", Toast.LENGTH_LONG).show() }
     }
 
     private fun addTitle(text: String) {
