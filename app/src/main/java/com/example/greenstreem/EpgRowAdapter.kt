@@ -10,6 +10,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.children
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import java.util.Calendar
@@ -150,7 +151,10 @@ class EpgRowAdapter(
         channelPrograms[streamId] = listings
         val pos = channels.indexOfFirst { it.id.toInt() == streamId }
         if (pos != -1) {
-            if (pos == focusedRowPosition) {
+            // Do not leave the focused/playing row on its initial placeholder.
+            // Later changes still wait until focus moves so live refreshes cannot
+            // rebuild the selected card underneath the remote cursor.
+            if (pos == focusedRowPosition && !existing.isNullOrEmpty()) {
                 deferredFocusedRowUpdates.add(pos)
             } else {
                 notifyItemChanged(pos, "EPG_UPDATE")
@@ -308,10 +312,20 @@ class EpgRowAdapter(
         val channel = channels[position]
         val programs = channelPrograms[channel.id.toInt()] ?: emptyList()
 
+        var restoreFocusAfterPlaceholder = false
         if (isEpgUpdateOnly) {
             val focused = holder.itemView.rootView.findFocus()
             if (focused != null && isDescendantOf(holder.itemView, focused)) {
-                return
+                val isPlaceholderOnly = holder.container.childCount > 0 &&
+                    (0 until holder.container.childCount).all { index ->
+                        holder.container.getChildAt(index)
+                            ?.findViewById<TextView>(R.id.tvProgramTitle)
+                            ?.text
+                            ?.toString()
+                            ?.equals("No Information", ignoreCase = true) == true
+                    }
+                if (!isPlaceholderOnly || programs.isEmpty()) return
+                restoreFocusAfterPlaceholder = true
             }
         }
 
@@ -326,6 +340,11 @@ class EpgRowAdapter(
             displayBlocks.forEach { block ->
                 addProgramBlock(inflater, holder.container, block.title, block.durationSec, channel, block.listing)
             }
+        }
+        if (restoreFocusAfterPlaceholder) {
+            holder.container.children
+                .firstOrNull { it.isFocusable }
+                ?.requestFocus()
         }
     }
 
@@ -391,7 +410,6 @@ class EpgRowAdapter(
         val cal = Calendar.getInstance().apply {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-            set(Calendar.MINUTE, 0)
         }
         return cal.timeInMillis / 1000L
     }

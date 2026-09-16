@@ -96,6 +96,8 @@ class MainActivity : FragmentActivity() {
     private var trackSelectionBeforeInternalActivity: TrackSelectionParameters? = null
 
     private var player: ExoPlayer? = null
+    private var httpDataSourceFactory: DefaultHttpDataSource.Factory? = null
+    private var returnToEmbyOnBack = false
     private lateinit var playerView: PlayerView
     private lateinit var previewPlayerView: PlayerView
     private lateinit var playerContainer: FrameLayout
@@ -299,7 +301,9 @@ class MainActivity : FragmentActivity() {
     private var pendingEpgRefresh = false
     private var pendingEpgRefreshUserRequested = false
     private var isChannelVisibilityEditMode = false
-    private val epgPxPerMinute = 7
+    // Keep the on-screen guide close to HDHomeRun's scale: about 90 minutes
+    // of programming is visible to the right of the channel column.
+    private val epgPxPerMinute = 14
     private var suppressPlayingIndicatorUpdatesUntilMs = 0L
     private var visibilityEditOriginalState: UiState = UiState.EPG_GRID
     private var visibilityEditChannels: List<Channel> = emptyList()
@@ -666,6 +670,22 @@ class MainActivity : FragmentActivity() {
         PlayBillingManager.refreshPurchases()
         applyAppearanceTheme()
         val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+        val returnToLiveGuideAfterEmby = prefs.getBoolean("return_to_live_guide_after_emby", false)
+        if (returnToLiveGuideAfterEmby) {
+            prefs.edit().remove("return_to_live_guide_after_emby").apply()
+            currentMode = ContentMode.LIVE_TV
+            saveCurrentMode(ContentMode.LIVE_TV)
+            val lastChannelId = currentChannel?.id
+                ?: prefs.getLong("last_channel_id", -1L).takeIf { it > 0L }
+            if (currentChannel == null && lastChannelId != null) {
+                resumeLastChannel(lastChannelId)
+            } else {
+                player?.play()
+            }
+            window.decorView.postDelayed({
+                if (!isFinishing && !isDestroyed) enterLiveGuideAtCurrentChannel()
+            }, if (currentChannel == null) 900L else 250L)
+        }
         val groupsChanged = prefs.getBoolean(KEY_GROUPS_CHANGED, false)
         if (groupsChanged) {
             prefs.edit().putBoolean(KEY_GROUPS_CHANGED, false).apply()
@@ -789,6 +809,7 @@ class MainActivity : FragmentActivity() {
             R.id.navTv,
             R.id.navMovies,
             R.id.navSeries,
+            R.id.navEmby,
             R.id.navSettings,
             R.id.navExit
         ).forEach { id ->
@@ -1442,14 +1463,14 @@ class MainActivity : FragmentActivity() {
                     .setTunnelingEnabled(tunneledPlaybackEnabled)
                     .build()
             }
-            val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            httpDataSourceFactory = DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(15_000)
                 .setReadTimeoutMs(30_000)
                 .setUserAgent(IPTV_PLAYER_USER_AGENT)
                 .setDefaultRequestProperties(IPTV_PLAYER_HEADERS)
             val mediaSourceFactory = DefaultMediaSourceFactory(this)
-                .setDataSourceFactory(httpDataSourceFactory)
+                .setDataSourceFactory(requireNotNull(httpDataSourceFactory))
             val bufferPrefSec = playerPrefs.getInt(KEY_BUFFER_SIZE_SEC, 60).coerceIn(0, 120)
             val liveBufferMs = (bufferPrefSec * 1000).coerceAtLeast(1_000)
             val minLiveBufferMs = when {
@@ -1956,6 +1977,7 @@ class MainActivity : FragmentActivity() {
         }
         findViewById<View>(R.id.navMovies)?.setOnClickListener { switchMode(ContentMode.MOVIES) }
         findViewById<View>(R.id.navSeries)?.setOnClickListener { switchMode(ContentMode.SERIES) }
+        findViewById<View>(R.id.navEmby)?.setOnClickListener { openEmbyFromMainRail() }
         findViewById<View>(R.id.navSettings)?.setOnClickListener { launchInternalActivity(Intent(this, SettingsActivity::class.java)) }
         findViewById<View>(R.id.navExit)?.setOnClickListener { finishAffinity() }
     }
@@ -1965,6 +1987,19 @@ class MainActivity : FragmentActivity() {
         muteForInternalActivity()
         postInternalActivityMutePasses()
         startActivity(intent)
+    }
+
+    private fun openEmbyFromMainRail() {
+        val unlocked = EmbyConnectEntitlement.isUnlocked(this)
+        val connected = EmbySecureStore.load(this) != null
+        if (unlocked && connected) {
+            launchInternalActivity(Intent(this, EmbyLibraryActivity::class.java))
+        } else {
+            launchInternalActivity(
+                Intent(this, SettingsActivity::class.java)
+                    .putExtra(SettingsActivity.EXTRA_OPEN_EMBY, true)
+            )
+        }
     }
 
     private fun launchSearchActivity() {
@@ -2157,8 +2192,11 @@ class MainActivity : FragmentActivity() {
         val startMs = currentGuideTimelineStartMs()
         val halfHourWidthPx = epgPxPerMinute * 30
         val gridStartPx = dp(220)
+        val startMinute = Calendar.getInstance().apply { timeInMillis = startMs }.get(Calendar.MINUTE)
+        val minutesToNextHalfHour = (30 - (startMinute % 30)) % 30
         timeRulerContainer.setPadding(
-            (gridStartPx - (halfHourWidthPx / 2)).coerceAtLeast(0),
+            (gridStartPx + (minutesToNextHalfHour * epgPxPerMinute) - (halfHourWidthPx / 2))
+                .coerceAtLeast(0),
             0,
             0,
             0
@@ -2166,7 +2204,10 @@ class MainActivity : FragmentActivity() {
         if (::epgAdapter.isInitialized) {
             epgAdapter.setTimelineStartTimestamp(startMs / 1000L)
         }
-        val cal = Calendar.getInstance().apply { timeInMillis = startMs }
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = startMs
+            add(Calendar.MINUTE, minutesToNextHalfHour)
+        }
         repeat(8) {
             val tv = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(halfHourWidthPx, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -2192,16 +2233,14 @@ class MainActivity : FragmentActivity() {
             (currentState == UiState.EPG_GRID || currentState == UiState.CATEGORIES)
     }
 
-    private fun updateNowTimeLinePosition(scrollX: Int) {
+    private fun updateNowTimeLinePosition(@Suppress("UNUSED_PARAMETER") scrollX: Int) {
         if (!::nowTimeLine.isInitialized) return
         if (!shouldShowNowTimeLine()) {
             nowTimeLine.visibility = View.GONE
             return
         }
-        val nowMs = System.currentTimeMillis()
-        val minutesFromHeaderStart = ((nowMs - currentGuideTimelineStartMs()) / 60000f).coerceAtLeast(0f)
-        val leftInsetPx = dp(220)
-        val x = leftInsetPx + (minutesFromHeaderStart * epgPxPerMinute) - scrollX
+        // Time moves underneath a stationary "now" marker, like HDHomeRun.
+        val x = dp(220).toFloat()
         nowTimeLine.translationX = x
         val panelWidth = if (::rightPanel.isInitialized) rightPanel.width else 0
         val minVisibleX = -nowTimeLine.width.toFloat()
@@ -2596,7 +2635,6 @@ class MainActivity : FragmentActivity() {
         return Calendar.getInstance().apply {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-            set(Calendar.MINUTE, 0)
         }.timeInMillis
     }
 
@@ -5099,6 +5137,11 @@ class MainActivity : FragmentActivity() {
         )
         tvProgramTitleLarge.text = title
         try {
+            val requestHeaders = IPTV_PLAYER_HEADERS.toMutableMap()
+            if (resumeKey.startsWith("emby_")) {
+                EmbySecureStore.load(this)?.let { requestHeaders.putAll(EmbyApiClient.playbackHeaders(it)) }
+            }
+            httpDataSourceFactory?.setDefaultRequestProperties(requestHeaders)
             resetAudioSelectionForNewMedia()
             player?.setMediaItem(MediaItem.fromUri(url))
             player?.prepare()
@@ -5176,6 +5219,22 @@ class MainActivity : FragmentActivity() {
     private fun resumeLastPlayback(): Boolean {
         val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
         return when (prefs.getString(KEY_LAST_PLAYBACK_TYPE, LAST_PLAYBACK_LIVE)) {
+            LAST_PLAYBACK_EMBY_LIVE -> {
+                val url = prefs.getString(KEY_LAST_PLAYBACK_URL, "").orEmpty()
+                val title = prefs.getString(KEY_LAST_PLAYBACK_TITLE, "Emby Live TV")
+                    .orEmpty().ifBlank { "Emby Live TV" }
+                val credentials = EmbySecureStore.load(this) ?: return false
+                if (url.isBlank()) return false
+                httpDataSourceFactory?.setDefaultRequestProperties(
+                    IPTV_PLAYER_HEADERS.toMutableMap().apply {
+                        putAll(EmbyApiClient.playbackHeaders(credentials))
+                    }
+                )
+                returnToEmbyOnBack = true
+                currentMode = ContentMode.LIVE_TV
+                playLiveMedia(listOf(url), title, UiState.FULL_SCREEN)
+                true
+            }
             LAST_PLAYBACK_MOVIE, LAST_PLAYBACK_SERIES -> {
                 val url = prefs.getString(KEY_LAST_PLAYBACK_URL, "").orEmpty()
                 val title = prefs.getString(KEY_LAST_PLAYBACK_TITLE, "Playback").orEmpty().ifBlank { "Playback" }
@@ -5246,7 +5305,22 @@ class MainActivity : FragmentActivity() {
     private fun handleExternalPlaybackIntent(intent: Intent?): Boolean {
         val playUrl = intent?.getStringExtra("play_url")?.trim().orEmpty()
         if (playUrl.isBlank()) return false
+        returnToEmbyOnBack = intent?.getBooleanExtra("return_to_emby", false) == true
         val title = intent?.getStringExtra("media_title")?.takeIf { it.isNotBlank() } ?: "Playback"
+        if (intent?.getBooleanExtra("play_live", false) == true) {
+            if (returnToEmbyOnBack) {
+                EmbySecureStore.load(this)?.let { credentials ->
+                    httpDataSourceFactory?.setDefaultRequestProperties(
+                        IPTV_PLAYER_HEADERS.toMutableMap().apply {
+                            putAll(EmbyApiClient.playbackHeaders(credentials))
+                        }
+                    )
+                }
+                saveLastPlayback(LAST_PLAYBACK_EMBY_LIVE, title, playUrl, null, -1L)
+            }
+            playLiveMedia(listOf(playUrl), title, UiState.FULL_SCREEN)
+            return true
+        }
         val resumeKey = intent?.getStringExtra("resume_key")?.takeIf { it.isNotBlank() }
             ?: "ext_${playUrl.hashCode()}"
         configureSeriesQueue(intent, resumeKey)
@@ -5749,6 +5823,13 @@ class MainActivity : FragmentActivity() {
             vodTopActionsScroller.visibility == View.VISIBLE
         ) {
             hideInlineVodActions(restoreGrid = true)
+            return true
+        }
+
+        if (returnToEmbyOnBack && currentState == UiState.FULL_SCREEN) {
+            saveVodResumeProgress()
+            player?.pause()
+            finish()
             return true
         }
 
@@ -6696,6 +6777,8 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+        ensureLiveGuideHydrated(targetCategoryId)
+
         val targetChannelId = guideFullscreenReturnChannelId ?: playing?.id ?: lastPlayedId
         val row = if (targetChannelId != null) {
             currentLiveChannels.indexOfFirst { it.id == targetChannelId }
@@ -6722,6 +6805,61 @@ class MainActivity : FragmentActivity() {
                 guideFullscreenReturnChannelId = null
             }
         }, 1500L)
+    }
+
+    private fun ensureLiveGuideHydrated(targetCategoryId: String?, attempt: Int = 0) {
+        if (currentMode != ContentMode.LIVE_TV) return
+
+        syncCurrentLiveChannelFromCachedStreams()
+        val needsHydration = currentLiveChannels.isEmpty() || currentChannel?.name == "Resuming..."
+        if (!needsHydration) return
+
+        // A provider outage must not leave the guide as a completely blank screen.
+        // Keep the last channel visible and hydrate its saved EPG while the full
+        // category/channel request retries in the background.
+        if (currentLiveChannels.isEmpty()) showSavedLiveChannelFallback()
+
+        val category = targetCategoryId
+            ?.let { id -> categoryAdapter.findPositionById(id) }
+            ?.takeIf { it >= 0 }
+            ?.let { position -> categoryAdapter.getItemAt(position) }
+            ?.takeUnless { isPlaylistHeader(it) }
+            ?: categoryAdapter.getItemAt(lastCategoryPosition)
+                ?.takeUnless { isPlaylistHeader(it) || it.id.isVirtualLiveCategoryId() }
+
+        if (category != null) {
+            fetchContentForCategory(category)
+        } else {
+            fetchCategories(autoSelectFirst = false, shouldScrollToActive = true)
+        }
+
+        rvContent.postDelayed({
+            if (currentMode == ContentMode.LIVE_TV &&
+                currentState == UiState.EPG_GRID &&
+                currentLiveChannels.isEmpty()
+            ) {
+                showSavedLiveChannelFallback()
+            }
+        }, 250L)
+
+        if (attempt >= LIVE_GUIDE_HYDRATION_MAX_RETRIES) return
+        rvContent.postDelayed({
+            if (currentMode == ContentMode.LIVE_TV &&
+                currentState == UiState.EPG_GRID &&
+                (currentLiveChannels.isEmpty() || currentChannel?.name == "Resuming...")
+            ) {
+                ensureLiveGuideHydrated(targetCategoryId, attempt + 1)
+            }
+        }, LIVE_GUIDE_HYDRATION_RETRY_MS)
+    }
+
+    private fun showSavedLiveChannelFallback() {
+        val savedChannel = currentChannel ?: return
+        epgAdapter.setData(listOf(savedChannel))
+        epgAdapter.setCurrentPlayingChannelId(savedChannel.id)
+        epgAdapter.focusedRowPosition = 0
+        lifecycleScope.launch { hydrateEpgCacheFromDisk(listOf(savedChannel)) }
+        rvContent.post { focusEpgRowAt(0) }
     }
 
     private fun alignLiveCategorySelectionToPlayback() {
@@ -6964,7 +7102,13 @@ class MainActivity : FragmentActivity() {
             ?.takeIf { it.isNotBlank() }
             ?: prefs.getString("last_category_id", "")
             ?: ""
-        currentChannel = Channel(id = id, name = "Resuming...", group = savedGroup, streamUrl = "")
+        val savedTitle = prefs.getString(KEY_LAST_PLAYBACK_TITLE, "").orEmpty()
+        currentChannel = Channel(
+            id = id,
+            name = savedTitle.takeIf { it.isNotBlank() && it != "Resuming..." } ?: "Live TV",
+            group = savedGroup,
+            streamUrl = ""
+        )
         epgAdapter.setCurrentPlayingChannelId(id)
         resetAudioSelectionForNewMedia()
         val urls = currentChannel?.let { buildLivePlaybackUrls(it) }.orEmpty()
@@ -6972,7 +7116,6 @@ class MainActivity : FragmentActivity() {
         currentLivePlaybackUrls = urls.ifEmpty { listOf(url) }
         currentLivePlaybackUrlIndex = 0
         currentLivePlaybackUrl = url
-        val savedTitle = prefs.getString(KEY_LAST_PLAYBACK_TITLE, "").orEmpty()
         saveLastPlayback(
             LAST_PLAYBACK_LIVE,
             savedTitle.takeIf { it.isNotBlank() && it != "Resuming..." } ?: "Live TV",
@@ -7150,6 +7293,13 @@ class MainActivity : FragmentActivity() {
             Log.w(TAG, "marking live source rejected reason=$reason ${livePlaybackDebugSummary(liveUrl)}")
         }
         if (switchToNextLivePlaybackUrl(reason)) return true
+        if (currentLivePlaybackUrls.isNotEmpty() &&
+            currentLivePlaybackUrls.all { it in rejectedLivePlaybackUrls }
+        ) {
+            Log.w(TAG, "all live sources rejected; stopping reconnect loop channel=${currentChannel?.name.orEmpty()}")
+            currentPlayer.stop()
+            return false
+        }
         if (currentLivePlaybackUrlIndex > 0 && currentLivePlaybackUrls.isNotEmpty()) {
             currentLivePlaybackUrlIndex = 0
             currentLivePlaybackUrl = currentLivePlaybackUrls.first()
@@ -7493,6 +7643,8 @@ class MainActivity : FragmentActivity() {
         private const val TAG = "GreenStreemEpg"
         private const val DEBUG_EPG_FOCUS = false
         private const val LIVE_FOCUS_SAVE_DELAY_MS = 450L
+        private const val LIVE_GUIDE_HYDRATION_RETRY_MS = 4_000L
+        private const val LIVE_GUIDE_HYDRATION_MAX_RETRIES = 2
         private const val IPTV_PLAYER_USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20"
         private val IPTV_PLAYER_HEADERS = mapOf(
             "Accept" to "*/*",
@@ -7527,6 +7679,7 @@ class MainActivity : FragmentActivity() {
         private const val KEY_LAST_PLAYBACK_LIVE_CATEGORY_ID = "last_playback_live_category_id"
         private const val VOD_WATCHED_REMAINING_MS = 600_000L
         private const val LAST_PLAYBACK_LIVE = "live"
+        private const val LAST_PLAYBACK_EMBY_LIVE = "emby_live"
         private const val LAST_PLAYBACK_MOVIE = "movie"
         private const val LAST_PLAYBACK_SERIES = "series"
         private const val KEY_VOD_WATCHED_PREFIX = "vod_watched_"

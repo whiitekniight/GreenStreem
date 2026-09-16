@@ -1,7 +1,7 @@
 {
-  "versionCode": 82,
-  "versionName": "1.9.46",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.46",
-  "notes": "Improves EPG and navigation focus, restores continuous and predictable remote movement, opens full movie details from Search, keeps Search quiet, speeds up VOD details, and preserves poster columns while browsing Search results."
+  "versionCode": 83,
+  "versionName": "1.9.47",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.47",
+  "notes": "Adds the optional Emby Connect upgrade so customers can connect their own Emby server and browse its Live TV, antenna guide, movies, and TV shows inside GreenStreem. Also improves Emby guide navigation, playback return behavior, and guide time alignment."
 }
 
