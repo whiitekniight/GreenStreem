@@ -1,7 +1,7 @@
 {
-  "versionCode": 84,
-  "versionName": "1.9.48",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.48",
-  "notes": "Fixes a Shield crash when returning from playback to the guide and moving toward categories. Includes the optional Emby Connect upgrade and the GreenStreem guide improvements from 1.9.47."
+  "versionCode": 85,
+  "versionName": "1.9.49",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.49",
+  "notes": "Fixes Back navigation after GreenStreem cold-starts into the last-played Emby Live TV channel. Back now returns to Emby categories instead of closing the app. Also includes the 1.9.48 guide crash fix."
 }
 

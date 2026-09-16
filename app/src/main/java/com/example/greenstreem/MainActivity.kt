@@ -673,6 +673,7 @@ class MainActivity : FragmentActivity() {
         val returnToLiveGuideAfterEmby = prefs.getBoolean("return_to_live_guide_after_emby", false)
         if (returnToLiveGuideAfterEmby) {
             prefs.edit().remove("return_to_live_guide_after_emby").apply()
+            returnToEmbyOnBack = false
             currentMode = ContentMode.LIVE_TV
             saveCurrentMode(ContentMode.LIVE_TV)
             val lastChannelId = currentChannel?.id
@@ -5829,7 +5830,13 @@ class MainActivity : FragmentActivity() {
         if (returnToEmbyOnBack && currentState == UiState.FULL_SCREEN) {
             saveVodResumeProgress()
             player?.pause()
-            finish()
+            // After a cold start MainActivity is the task root, so there may be
+            // no Emby library activity underneath playback. Bring an existing
+            // library screen forward or create it above the player.
+            launchInternalActivity(
+                Intent(this, EmbyLibraryActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            )
             return true
         }
 
