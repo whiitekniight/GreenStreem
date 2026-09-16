@@ -342,9 +342,18 @@ class EpgRowAdapter(
             }
         }
         if (restoreFocusAfterPlaceholder) {
-            holder.container.children
-                .firstOrNull { it.isFocusable }
-                ?.requestFocus()
+            // Binding can happen while RecyclerView is computing its layout. A
+            // synchronous focus request fires the row-focus listener, which
+            // notifies the adapter and crashes RecyclerView. Restore focus on
+            // the next UI pass, after the current layout has completed.
+            val boundChannelId = holder.boundChannelId
+            holder.container.post {
+                if (holder.boundChannelId == boundChannelId && holder.itemView.isAttachedToWindow) {
+                    holder.container.children
+                        .firstOrNull { it.isFocusable }
+                        ?.requestFocus()
+                }
+            }
         }
     }
 

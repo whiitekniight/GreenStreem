@@ -1,7 +1,7 @@
 {
-  "versionCode": 83,
-  "versionName": "1.9.47",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.47",
-  "notes": "Adds the optional Emby Connect upgrade so customers can connect their own Emby server and browse its Live TV, antenna guide, movies, and TV shows inside GreenStreem. Also improves Emby guide navigation, playback return behavior, and guide time alignment."
+  "versionCode": 84,
+  "versionName": "1.9.48",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.48",
+  "notes": "Fixes a Shield crash when returning from playback to the guide and moving toward categories. Includes the optional Emby Connect upgrade and the GreenStreem guide improvements from 1.9.47."
 }
 
