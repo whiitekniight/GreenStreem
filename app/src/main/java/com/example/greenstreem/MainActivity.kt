@@ -211,6 +211,9 @@ class MainActivity : FragmentActivity() {
     private val epgUiSuppressDuringNavMs = 350L
     private var suppressEpgFocusUpdatesUntilMs = 0L
     private var epgFocusRequestToken = 0
+    private var pendingEpgFocusPosition: Int? = null
+    private var guideBrowseStartMs: Long? = null
+    private var renderedGuideStartMs: Long? = null
     private val uiTickHandler = Handler(Looper.getMainLooper())
     private var uiTickRunnable: Runnable? = null
     private var lastEpgClockRefreshMinute: Long = -1L
@@ -548,9 +551,11 @@ class MainActivity : FragmentActivity() {
         epgAdapter = EpgRowAdapter(epgPxPerMinute, epgScrollSync,
             onProgramFocus = { channel, listing ->
                 val now = System.currentTimeMillis()
+                val pos = epgAdapter.getPositionForChannelId(channel.id)
                 if (currentMode == ContentMode.LIVE_TV &&
                     currentState == UiState.EPG_GRID &&
-                    now < suppressEpgFocusUpdatesUntilMs
+                    now < suppressEpgFocusUpdatesUntilMs &&
+                    pos != pendingEpgFocusPosition
                 ) {
                     if (DEBUG_EPG_FOCUS) {
                         Log.d(TAG, "skip focus update channel=${channel.id} during suppress window")
@@ -560,12 +565,11 @@ class MainActivity : FragmentActivity() {
                 if (DEBUG_EPG_FOCUS) {
                     Log.d(TAG, "focus update channel=${channel.id} state=$currentState current=${currentChannel?.id} listing=${listing?.title?.take(24)}")
                 }
-                val pos = epgAdapter.getPositionForChannelId(channel.id)
                 if (pos != RecyclerView.NO_POSITION) {
                     epgAdapter.focusedRowPosition = pos
                     scheduleLiveFocusedRowSave(pos)
                 }
-                updateFocusInfo(channel, listing)
+                updateFocusInfo(channel, listing, respectSuppressWindow = false)
             },
             onProgramClick = { channel, listing ->
                 if (isChannelVisibilityEditMode) return@EpgRowAdapter
@@ -744,7 +748,8 @@ class MainActivity : FragmentActivity() {
         if (DEBUG_EPG_FOCUS) {
             Log.d(TAG, "updateFocusInfo channel=${channel.id} state=$currentState preserve=$preserveDescription listing=${listing?.title?.take(24)}")
         }
-        val effectiveListing = listing ?: resolveCurrentlyAiringListing(channel.id.toInt())
+        val browsingFuture = currentState == UiState.EPG_GRID && guideBrowseStartMs != null
+        val effectiveListing = listing ?: if (browsingFuture) null else resolveCurrentlyAiringListing(channel.id.toInt())
         tvProgramTitleLarge.text = DataUtils.decodeBase64(
             effectiveListing?.title ?: ChannelNameFormatter.format(this, channel.name)
         )
@@ -753,6 +758,8 @@ class MainActivity : FragmentActivity() {
             if (!decodedDescription.isNullOrBlank() && !decodedDescription.isLoadingLike()) {
                 tvProgramDescription.text = decodedDescription
                 lastLiveProgramDescription = decodedDescription
+            } else if (browsingFuture) {
+                tvProgramDescription.text = "No description available"
             } else if (lastLiveProgramDescription.isNotBlank()) {
                 tvProgramDescription.text = lastLiveProgramDescription
             } else if (tvProgramDescription.text.isNullOrBlank()) {
@@ -838,6 +845,7 @@ class MainActivity : FragmentActivity() {
         lifecycleScope.launch {
             val isFav = runCatching { db.favoriteDao().isFavorite(channel.id.toInt()) }.getOrDefault(false)
             val options = arrayOf(
+                "Guide day / time",
                 if (isFav) "Remove from Favorites" else "Add to Favorites",
                 "EPG channel finder / override",
                 "Manage Channel Visibility",
@@ -854,7 +862,9 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun showQuickPanel() {
+        val guideRow = resolveFocusedEpgRowPosition()
         val options = arrayOf(
+            "Guide day / time",
             "Channel options",
             "Cycle aspect ratio",
             "Video quality",
@@ -866,18 +876,97 @@ class MainActivity : FragmentActivity() {
             .setTitle("Quick Panel")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> {
+                    0 -> showGuideDayPicker(guideRow)
+                    1 -> {
                         val channel = currentChannel ?: getFocusedEpgChannel()
                         if (channel != null) showChannelOptions(channel)
                     }
-                    1 -> cycleAspectRatio()
-                    2 -> showVideoTrackDialog()
-                    3 -> showAudioTrackDialog()
-                    4 -> showSubtitleTrackDialog()
-                    5 -> showSleepTimerDialog()
+                    2 -> cycleAspectRatio()
+                    3 -> showVideoTrackDialog()
+                    4 -> showAudioTrackDialog()
+                    5 -> showSubtitleTrackDialog()
+                    6 -> showSleepTimerDialog()
                 }
             }
             .show()
+    }
+
+    private fun guideDaysAhead(): Int = EpgGuideRange.daysForIndex(
+        getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE).getInt("epg_future_days", 3)
+    )
+
+    private fun showGuideDayPicker(guideRow: Int = resolveFocusedEpgRowPosition()) {
+        val days = (0 until guideDaysAhead()).map { offset ->
+            Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, offset)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        }
+        val format = SimpleDateFormat("EEEE, MMM d", Locale.getDefault())
+        val labels = listOf("Now") + days.map { format.format(Date(it)) }
+        AlertDialog.Builder(this)
+            .setTitle("Guide day — ${guideDaysAhead()} days ahead")
+            .setItems(labels.toTypedArray()) { _, dayIndex ->
+                if (dayIndex == 0) {
+                    openGuideWindow(liveGuideTimelineStartMs(), returnToNow = true, row = guideRow)
+                } else {
+                    val day = days[dayIndex - 1]
+                    val hours = (0..23).filter { hour ->
+                        val target = Calendar.getInstance().apply {
+                            timeInMillis = day
+                            set(Calendar.HOUR_OF_DAY, hour)
+                        }.timeInMillis
+                        target + 3_600_000L > System.currentTimeMillis()
+                    }
+                    val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+                    val starts = hours.map { hour ->
+                        Calendar.getInstance().apply {
+                            timeInMillis = day
+                            set(Calendar.HOUR_OF_DAY, hour)
+                        }.timeInMillis
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle(format.format(Date(day)))
+                        .setItems(starts.map { timeFormat.format(Date(it)) }.toTypedArray()) { _, index ->
+                            openGuideWindow(starts[index], row = guideRow)
+                        }.show()
+                }
+            }.show()
+    }
+
+    private fun openGuideWindow(requestedStartMs: Long, returnToNow: Boolean = false, row: Int = resolveFocusedEpgRowPosition()) {
+        guideBrowseStartMs = if (returnToNow) null else EpgGuideRange.clampStart(
+            requestedStartMs, liveGuideTimelineStartMs(), guideDaysAhead()
+        )
+        ++epgFocusRequestToken
+        pendingEpgFocusPosition = null
+        epgScrollSync.releaseHorizontalPosition()
+        epgScrollSync.scrollAllTo(0)
+        if (currentState != UiState.EPG_GRID) updateUiState(UiState.EPG_GRID)
+        renderDynamicTimeRuler()
+        epgScrollSync.holdHorizontalPosition()
+        focusEpgRowAt(row, timelineX = dp(GUIDE_CURSOR_INSET_DP), preservedHorizontalScrollX = 0)
+    }
+
+    private fun pageGuideAtBoundary(forward: Boolean): Boolean {
+        val focused = currentFocus ?: return false
+        val container = focused.parent as? ViewGroup ?: return false
+        if (container.id != R.id.programsContainer) return false
+        val index = container.indexOfChild(focused)
+        val adjacent = if (forward) (index + 1 until container.childCount) else (0 until index)
+        if (adjacent.any { container.getChildAt(it).isFocusable }) return false
+        val start = currentGuideTimelineStartMs()
+        if (!forward && start <= liveGuideTimelineStartMs()) return false
+        val next = EpgGuideRange.pageStart(start, forward, liveGuideTimelineStartMs(), guideDaysAhead())
+        if (next == start) {
+            if (forward) Toast.makeText(this, "End of ${guideDaysAhead()}-day guide", Toast.LENGTH_SHORT).show()
+            return forward
+        }
+        openGuideWindow(next)
+        return true
     }
 
     private data class TrackChoice(
@@ -1101,6 +1190,7 @@ class MainActivity : FragmentActivity() {
     private fun handleOptionSelection(selection: String, channel: Channel) {
         lifecycleScope.launch {
             when (selection) {
+                "Guide day / time" -> showGuideDayPicker(epgAdapter.getPositionForChannelId(channel.id).coerceAtLeast(0))
                 "Add to Favorites" -> {
                     db.favoriteDao().insert(Favorite(channel.id.toInt(), channel.name, channel.logoUrl, channel.epgId, channel.group))
                     Toast.makeText(this@MainActivity, "Added to Favorites", Toast.LENGTH_SHORT).show()
@@ -1912,6 +2002,9 @@ class MainActivity : FragmentActivity() {
         focusControls: Boolean = true,
         allowWhenControlsVisible: Boolean = false
     ): Boolean {
+        // Some VOD entry points can retain the previous live mode, while older
+        // library paths may not yet have a resume key. Block only genuine live
+        // playback; either library mode or an active VOD key is seekable.
         if (currentState != UiState.FULL_SCREEN ||
             (currentMode == ContentMode.LIVE_TV && currentVodResumeKey == null)
         ) {
@@ -2117,6 +2210,7 @@ class MainActivity : FragmentActivity() {
         ) {
             epgAdapter.refreshGuideClock()
         }
+        if (currentState == UiState.EPG_GRID && rvContent.hasFocus()) return
         currentChannel?.let { channel ->
             updateFocusInfo(
                 channel,
@@ -2192,9 +2286,14 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun renderDynamicTimeRuler() {
-        timeRulerContainer.removeAllViews()
-        val sdf = SimpleDateFormat("hh:mm a", Locale.getDefault())
         val startMs = currentGuideTimelineStartMs()
+        if (renderedGuideStartMs == startMs) return
+        renderedGuideStartMs = startMs
+        val restoreRow = if (currentMode == ContentMode.LIVE_TV && currentState == UiState.EPG_GRID &&
+            ::epgAdapter.isInitialized && rvContent.hasFocus()
+        ) resolveFocusedEpgRowPosition() else null
+        timeRulerContainer.removeAllViews()
+        val sdf = SimpleDateFormat("EEE d, h:mm a", Locale.getDefault())
         val halfHourWidthPx = epgPxPerMinute * 30
         val gridStartPx = dp(220)
         val startMinute = Calendar.getInstance().apply { timeInMillis = startMs }.get(Calendar.MINUTE)
@@ -2213,7 +2312,7 @@ class MainActivity : FragmentActivity() {
             timeInMillis = startMs
             add(Calendar.MINUTE, minutesToNextHalfHour)
         }
-        repeat(8) {
+        repeat(EpgGuideRange.WINDOW_MINUTES / 30) {
             val tv = TextView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(halfHourWidthPx, ViewGroup.LayoutParams.WRAP_CONTENT)
                 text = sdf.format(cal.time)
@@ -2226,6 +2325,14 @@ class MainActivity : FragmentActivity() {
         }
         updateNowTimeLine()
         updateGuideClock()
+        if (restoreRow != null) {
+            val token = epgFocusRequestToken
+            rvContent.post {
+                if (token == epgFocusRequestToken && currentState == UiState.EPG_GRID) {
+                    focusEpgRowAt(restoreRow, preservedHorizontalScrollX = epgScrollSync.getCurrentX())
+                }
+            }
+        }
     }
 
     private fun updateNowTimeLine() {
@@ -2244,8 +2351,9 @@ class MainActivity : FragmentActivity() {
             nowTimeLine.visibility = View.GONE
             return
         }
-        // Time moves underneath a stationary "now" marker, like HDHomeRun.
-        val x = dp(220).toFloat()
+        // Fixed guide cursor: only the ruler and program rows move horizontally.
+        // Do not turn this back into a wall-clock position within the program grid.
+        val x = (dp(220) + dp(GUIDE_CURSOR_INSET_DP)).toFloat()
         nowTimeLine.translationX = x
         val panelWidth = if (::rightPanel.isInitialized) rightPanel.width else 0
         val minVisibleX = -nowTimeLine.width.toFloat()
@@ -2516,6 +2624,9 @@ class MainActivity : FragmentActivity() {
                 } else if (shouldScrollToActive) {
                     rvCategories.post { centerRecyclerPosition(rvCategories, lastCategoryPosition, 56) }
                 }
+                if (currentState == UiState.CATEGORIES) {
+                    rvCategories.post { restoreCategoryFocus(lastCategoryPosition) }
+                }
                 if (autoSelectFirst && rows.isNotEmpty()) {
                     val idx = lastCategoryPosition.takeIf {
                         it in rows.indices && rows[it].isAutoSelectableStartupCategory(requestedMode)
@@ -2610,6 +2721,9 @@ class MainActivity : FragmentActivity() {
                                 centerRecyclerPosition(rvCategories, idx, 56)
                             }
                         }
+                        if (currentState == UiState.CATEGORIES) {
+                            rvCategories.post { restoreCategoryFocus(lastCategoryPosition) }
+                        }
                         
                         if (autoSelectFirst && rows.isNotEmpty()) {
                             val idx = lastCategoryPosition.takeIf {
@@ -2637,7 +2751,13 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun currentGuideTimelineStartMs(): Long {
+        return guideBrowseStartMs ?: liveGuideTimelineStartMs()
+    }
+
+    private fun liveGuideTimelineStartMs(): Long {
         return Calendar.getInstance().apply {
+            val minute = get(Calendar.MINUTE)
+            set(Calendar.MINUTE, minute - (minute % 30))
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
@@ -3268,7 +3388,7 @@ class MainActivity : FragmentActivity() {
             epgAdapter.refreshPlayingIndicatorRows(currentChannel?.id)
             centerRecyclerPosition(rvContent, targetRow, 34)
             if (currentState == UiState.EPG_GRID && currentLiveCategoryId == categoryId) {
-                rvContent.post { focusEpgRowAt(targetRow) }
+                rvContent.post { ensureLiveGuideFocus(targetRow) }
             }
             prefetchAdjacentLiveGroups(categoryId)
             refreshRecentChannelsRow()
@@ -3418,6 +3538,8 @@ class MainActivity : FragmentActivity() {
             prefs.getBoolean(KEY_SECONDARY_EPG_ENABLED, false).toString(),
             prefs.getInt(KEY_SECONDARY_EPG_MODE, SECONDARY_EPG_MODE_FILL_MISSING).toString(),
             prefs.getInt(KEY_EPG_DAYS, 2).toString(),
+            prefs.getInt("epg_future_days", 3).toString(),
+            "full-guide-v1",
             urls,
             legacyUrl
         ).joinToString("|")
@@ -3596,23 +3718,22 @@ class MainActivity : FragmentActivity() {
                 continue
             }
             epgActiveFetchCount++
-            val call = service.getShortEpg(
+            val call = service.getFullEpgForStream(
                 XtreamManager.username,
                 XtreamManager.password,
-                streamId,
-                getEpgLimitFromDaysSetting()
+                streamId
             )
             pendingEpgCalls.add(call)
             call.enqueue(object : Callback<XtreamEpgResponse> {
                 override fun onResponse(call: Call<XtreamEpgResponse>, response: Response<XtreamEpgResponse>) {
                     pendingEpgCalls.remove(call)
                     if (!response.isSuccessful) {
-                        requestFullProviderEpg(channel, streamId)
+                        requestShortProviderEpg(channel, streamId)
                         return
                     }
                     val primary = response.body()?.listings.orEmpty()
                     if (primary.isEmpty()) {
-                        requestFullProviderEpg(channel, streamId)
+                        requestShortProviderEpg(channel, streamId)
                         return
                     }
                     applyProviderEpgResult(channel, streamId, primary)
@@ -3624,7 +3745,7 @@ class MainActivity : FragmentActivity() {
                         return
                     }
                     Log.w(TAG, "EPG provider parse/request failed stream=$streamId: ${t.javaClass.simpleName}: ${t.message}")
-                    requestFullProviderEpg(channel, streamId)
+                    requestShortProviderEpg(channel, streamId)
                 }
             })
         }
@@ -3633,15 +3754,16 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun requestFullProviderEpg(channel: Channel, streamId: Int) {
+    private fun requestShortProviderEpg(channel: Channel, streamId: Int) {
         val service = XtreamManager.getService() ?: run {
             applyProviderEpgResult(channel, streamId, emptyList())
             return
         }
-        val fallbackCall = service.getFullEpgForStream(
+        val fallbackCall = service.getShortEpg(
             XtreamManager.username,
             XtreamManager.password,
-            streamId
+            streamId,
+            getEpgLimitFromDaysSetting()
         )
         pendingEpgCalls.add(fallbackCall)
         fallbackCall.enqueue(object : Callback<XtreamEpgResponse> {
@@ -3664,7 +3786,7 @@ class MainActivity : FragmentActivity() {
                     finishEpgFetch(streamId)
                     return
                 }
-                Log.w(TAG, "EPG full provider fallback failed stream=$streamId: ${t.javaClass.simpleName}: ${t.message}")
+                Log.w(TAG, "EPG short provider fallback failed stream=$streamId: ${t.javaClass.simpleName}")
                 applyProviderEpgResult(channel, streamId, emptyList())
             }
         })
@@ -3675,6 +3797,8 @@ class MainActivity : FragmentActivity() {
         streamId: Int,
         primary: List<XtreamEpgListing>
     ) {
+        val horizon = primary.maxOfOrNull { it.stopTimestamp } ?: 0L
+        Log.d(TAG, "EPG coverage stream=$streamId entries=${primary.size} futureHours=${((horizon - System.currentTimeMillis() / 1000L) / 3600L).coerceAtLeast(0L)}")
         // Show provider data immediately; custom XMLTV merging may still be rebuilding.
         if (primary.isNotEmpty()) {
             keepExistingEpgWhenRefreshIsEmpty(streamId, primary)
@@ -3804,7 +3928,7 @@ class MainActivity : FragmentActivity() {
             epgAdapter.refreshPlayingIndicatorRows(currentChannel?.id)
             centerRecyclerPosition(rvContent, targetRow, 34)
             if (currentState == UiState.EPG_GRID && currentLiveCategoryId == categoryId) {
-                rvContent.post { focusEpgRowAt(targetRow) }
+                rvContent.post { ensureLiveGuideFocus(targetRow) }
             }
             enqueueInitialEpgForChannels(sortedChannels)
             refreshRecentChannelsRow()
@@ -3814,6 +3938,7 @@ class MainActivity : FragmentActivity() {
 
     private fun refreshLiveProgramInfoIfCurrent(streamId: Int, listings: List<XtreamEpgListing>) {
         if (currentMode != ContentMode.LIVE_TV) return
+        if (currentState == UiState.EPG_GRID && (guideBrowseStartMs != null || rvContent.hasFocus())) return
         val channel = currentChannel?.takeIf { it.id.toInt() == streamId }
             ?: currentLiveChannels.firstOrNull { it.id.toInt() == streamId }
             ?: return
@@ -4025,20 +4150,8 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun getEpgLimitFromDaysSetting(): Int {
-        if (!ProEntitlement.isProUnlocked(this)) return 48
-        val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
-        val idx = if (prefs.contains(KEY_EPG_DAYS)) {
-            prefs.getInt(KEY_EPG_DAYS, 2)
-        } else {
-            prefs.getInt(KEY_EPG_DAYS_LEGACY, 2)
-        }.coerceIn(0, 3)
-        // Approximate half-hour blocks per day; request enough entries for selected range.
-        return when (idx) {
-            0 -> 48
-            1 -> 96
-            2 -> 144
-            else -> 336
-        }
+        // The fallback takes a program count, not a day count. Allow short shows.
+        return guideDaysAhead() * 24 * 12
     }
 
     private fun handleVodClick(item: Any, position: Int) {
@@ -5411,6 +5524,9 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun updateUiState(newState: UiState) {
+        ++epgFocusRequestToken
+        pendingEpgFocusPosition = null
+        if (::epgScrollSync.isInitialized) epgScrollSync.releaseHorizontalPosition()
         val previousState = currentState
         if (::vodTopActionsScroller.isInitialized && vodTopActionsScroller.visibility == View.VISIBLE) {
             hideInlineVodActions(restoreGrid = false)
@@ -5465,7 +5581,7 @@ class MainActivity : FragmentActivity() {
                         } else {
                             resolveFocusedEpgRowPosition()
                         }
-                        focusEpgRowAt(targetPos)
+                        ensureLiveGuideFocus(targetPos)
                         currentChannel?.let { channel ->
                             updateFocusInfo(
                                 channel,
@@ -5550,6 +5666,38 @@ class MainActivity : FragmentActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (handleNextEpisodePromptKey(event)) return true
+        // The progress-only seek overlay allows repeated skips. The expanded
+        // button row instead owns DPAD navigation (audio, subtitles, etc.).
+        if (event.action == KeyEvent.ACTION_DOWN && currentState == UiState.FULL_SCREEN &&
+            movieControlsButtons.visibility == View.VISIBLE &&
+            event.keyCode in intArrayOf(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)
+        ) scheduleMovieControlsHide()
+        // Guide navigation owns its row/time position. Handle it before Android
+        // can scroll a program into view; fullscreen VOD seeking stays below.
+        if (currentMode == ContentMode.LIVE_TV && currentState == UiState.EPG_GRID) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_MENU -> {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) showQuickPanel()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) {
+                        suppressEpgUiUpdatesTemporarily()
+                        if (isTvUiMode()) epgScrollSync.holdHorizontalPosition()
+                        if (moveEpgFocus(event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) return true
+                    } else if (event.action == KeyEvent.ACTION_UP) {
+                        return true
+                    }
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    epgScrollSync.releaseHorizontalPosition()
+                    if (event.action == KeyEvent.ACTION_DOWN &&
+                        pageGuideAtBoundary(event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+                    ) return true
+                }
+            }
+        }
         if (event.action == KeyEvent.ACTION_DOWN) {
             if (handleFullscreenMovieControlsKey(event.keyCode)) return true
             when (event.keyCode) {
@@ -5560,10 +5708,10 @@ class MainActivity : FragmentActivity() {
                     if (seekMovieFromRemote(30_000L, allowWhenControlsVisible = true)) return true
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (seekMovieFromRemote(-30_000L, focusControls = false, allowWhenControlsVisible = true)) return true
+                    if (seekMovieFromRemote(-30_000L, focusControls = false)) return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (seekMovieFromRemote(30_000L, focusControls = false, allowWhenControlsVisible = true)) return true
+                    if (seekMovieFromRemote(30_000L, focusControls = false)) return true
                 }
             }
         }
@@ -5614,10 +5762,10 @@ class MainActivity : FragmentActivity() {
                 if (seekMovieFromRemote(30_000L, allowWhenControlsVisible = true)) return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (seekMovieFromRemote(-30_000L, focusControls = false, allowWhenControlsVisible = true)) return true
+                if (seekMovieFromRemote(-30_000L, focusControls = false)) return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (seekMovieFromRemote(30_000L, focusControls = false, allowWhenControlsVisible = true)) return true
+                if (seekMovieFromRemote(30_000L, focusControls = false)) return true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 if (movieControlsBar.visibility == View.VISIBLE &&
@@ -6057,7 +6205,7 @@ class MainActivity : FragmentActivity() {
         val itemCount = epgAdapter.itemCount
         if (itemCount == 0) return false
 
-        val currentPos = resolveFocusedEpgRowPosition()
+        val currentPos = pendingEpgFocusPosition ?: resolveFocusedEpgRowPosition()
         val horizontalScrollX = epgScrollSync.getCurrentX()
         val targetPos = if (isDown) {
             if (currentPos >= itemCount - 1) 0 else currentPos + 1
@@ -6067,10 +6215,50 @@ class MainActivity : FragmentActivity() {
 
         focusEpgRowAt(
             position = targetPos,
-            timelineX = currentTimeContentX(),
+            timelineX = guideFocusAnchorX(),
             preservedHorizontalScrollX = horizontalScrollX
         )
         return true
+    }
+
+    private fun ensureLiveGuideFocus(position: Int? = null, attempt: Int = 0) {
+        if (currentMode != ContentMode.LIVE_TV || currentState != UiState.EPG_GRID) return
+        val focused = currentFocus
+        if (DEBUG_EPG_FOCUS) {
+            Log.d(TAG, "ensureLiveGuideFocus attempt=$attempt requested=$position itemCount=${epgAdapter.itemCount} focus=${focused?.javaClass?.simpleName} attached=${focused?.isAttachedToWindow}")
+        }
+        if (focused != null) {
+            val focusedRow = rvContent.findContainingItemView(focused)
+            if (focusedRow != null) {
+                val focusedPosition = rvContent.getChildAdapterPosition(focusedRow)
+                if (focusedPosition != RecyclerView.NO_POSITION) {
+                    epgAdapter.focusedRowPosition = focusedPosition
+                    lastGridPosition = focusedPosition
+                    scheduleLiveFocusedRowSave(focusedPosition)
+                }
+                epgAdapter.restoreFocusedProgramAppearance(focused)
+                return
+            }
+        }
+
+        val itemCount = epgAdapter.itemCount
+        if (itemCount > 0) {
+            val target = (position ?: resolveFocusedEpgRowPosition())
+                .coerceIn(0, itemCount - 1)
+            focusEpgRowAt(target)
+            // focusEpgRowAt owns its retries. A second recovery loop can
+            // replace a newer remote-navigation request during row recycling.
+            return
+        }
+        if (attempt < 30) {
+            val requestToken = epgFocusRequestToken
+            val categoryId = currentLiveCategoryId
+            rvContent.postDelayed({
+                if (requestToken == epgFocusRequestToken && categoryId == currentLiveCategoryId) {
+                    ensureLiveGuideFocus(position, attempt + 1)
+                }
+            }, 100L)
+        }
     }
 
     private fun resolveFocusedEpgRowPosition(): Int {
@@ -6101,8 +6289,25 @@ class MainActivity : FragmentActivity() {
             requestToken
         }
         val itemCount = epgAdapter.itemCount
-        if (itemCount == 0) return
+        if (itemCount == 0) {
+            if (attempt < 12) {
+                rvContent.postDelayed({
+                    if (token == epgFocusRequestToken && currentState == UiState.EPG_GRID) {
+                        focusEpgRowAt(
+                            position = position,
+                            attempt = attempt + 1,
+                            requestToken = token,
+                            alignTop = alignTop,
+                            timelineX = timelineX,
+                            preservedHorizontalScrollX = preservedHorizontalScrollX
+                        )
+                    }
+                }, 75L)
+            }
+            return
+        }
         val targetPos = position.coerceIn(0, itemCount - 1)
+        pendingEpgFocusPosition = targetPos
         epgAdapter.focusedRowPosition = targetPos
         lastGridPosition = targetPos
         scheduleLiveFocusedRowSave(targetPos)
@@ -6116,7 +6321,9 @@ class MainActivity : FragmentActivity() {
 
         // Scroll and focus in ONE post to avoid focus jumping between two separate async calls
         rvContent.post {
-            if (token != epgFocusRequestToken) return@post
+            if (token != epgFocusRequestToken || currentState != UiState.EPG_GRID ||
+                currentMode != ContentMode.LIVE_TV
+            ) return@post
             val lm = rvContent.layoutManager as? LinearLayoutManager
             if (lm != null) {
                 val itemHeight = rvContent.findViewHolderForAdapterPosition(targetPos)?.itemView?.height
@@ -6141,15 +6348,28 @@ class MainActivity : FragmentActivity() {
                         }
                     }, 50)
                 }
+                if (attempt >= 6) pendingEpgFocusPosition = null
                 return@post
             }
-            val targetTimelineX = timelineX ?: currentTimeContentX()
-            val timelineIndex = findProgramIndexForTimelineX(holder.container, targetTimelineX)
-            val focusTarget = holder.container.getChildAt(timelineIndex)
-                ?: holder.container.getChildAt(0)
+            val targetTimelineX = timelineX ?: guideFocusAnchorX()
+            val focusTarget = findFocusableProgramForTimelineX(holder.container, targetTimelineX)
                 ?: holder.itemView
             if (token == epgFocusRequestToken) {
-                focusTarget.requestFocus()
+                val focusAccepted = focusTarget.requestFocus()
+                if (focusAccepted) pendingEpgFocusPosition = null
+                if (DEBUG_EPG_FOCUS) {
+                    Log.d(TAG, "focusEpgRowAt row=$targetPos accepted=$focusAccepted focusable=${focusTarget.isFocusable} attached=${focusTarget.isAttachedToWindow}")
+                }
+                if (!focusAccepted) {
+                    focusTarget.post {
+                        if (token == epgFocusRequestToken && currentState == UiState.EPG_GRID &&
+                            currentMode == ContentMode.LIVE_TV && focusTarget.isAttachedToWindow
+                        ) {
+                            focusTarget.requestFocus()
+                            pendingEpgFocusPosition = null
+                        }
+                    }
+                }
                 preservedHorizontalScrollX?.let { scrollX ->
                     epgScrollSync.scrollAllTo(scrollX)
                     focusTarget.post {
@@ -6162,10 +6382,9 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun currentTimeContentX(): Int {
-        val minutesFromHeaderStart =
-            ((System.currentTimeMillis() - currentGuideTimelineStartMs()) / 60000f).coerceAtLeast(0f)
-        return (minutesFromHeaderStart * epgPxPerMinute).toInt().coerceAtLeast(0)
+    private fun guideFocusAnchorX(): Int {
+        // The fixed cursor is at the viewport's left edge, not at elapsed time.
+        return epgScrollSync.getCurrentX().coerceAtLeast(0) + dp(GUIDE_CURSOR_INSET_DP)
     }
 
     private fun findProgramIndexForTimelineX(container: LinearLayout, timelineX: Int): Int {
@@ -6177,6 +6396,22 @@ class MainActivity : FragmentActivity() {
             if (anchorX < child.right) return i
         }
         return childCount - 1
+    }
+
+    private fun findFocusableProgramForTimelineX(container: LinearLayout, timelineX: Int): View? {
+        val childCount = container.childCount
+        if (childCount <= 0) return null
+        val preferredIndex = findProgramIndexForTimelineX(container, timelineX)
+        val preferred = container.getChildAt(preferredIndex)
+        if (preferred?.isFocusable == true) return preferred
+
+        val anchorX = timelineX.coerceAtLeast(0)
+        return (0 until childCount)
+            .mapNotNull { childIndex -> container.getChildAt(childIndex) }
+            .filter { child -> child.isFocusable }
+            .minByOrNull { child ->
+                kotlin.math.abs(((child.left + child.right) / 2) - anchorX)
+            }
     }
 
     private fun centerRecyclerPosition(rv: RecyclerView, position: Int, defaultItemHeightPx: Int) {
@@ -7654,6 +7889,7 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         private const val TAG = "GreenStreemEpg"
+        private const val GUIDE_CURSOR_INSET_DP = 4
         private const val DEBUG_EPG_FOCUS = false
         private const val LIVE_FOCUS_SAVE_DELAY_MS = 450L
         private const val LIVE_GUIDE_HYDRATION_RETRY_MS = 4_000L

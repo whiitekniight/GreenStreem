@@ -73,10 +73,16 @@ class EpgRowAdapter(
     }
 
     fun setData(newChannels: List<Channel>) {
+        val previouslyFocusedChannelId = channels.getOrNull(focusedRowPosition)?.id
+        val previousFocusedPosition = focusedRowPosition
         channelPrograms.clear()
         deferredFocusedRowUpdates.clear()
         this.channels = newChannels
-        focusedRowPosition = RecyclerView.NO_POSITION
+        focusedRowPosition = previouslyFocusedChannelId
+            ?.let { channelId -> newChannels.indexOfFirst { it.id == channelId } }
+            ?.takeIf { it != RecyclerView.NO_POSITION }
+            ?: previousFocusedPosition.takeIf { it in newChannels.indices }
+            ?: RecyclerView.NO_POSITION
         notifyDataSetChanged()
     }
 
@@ -84,6 +90,12 @@ class EpgRowAdapter(
 
     fun getPositionForChannelId(channelId: Long): Int =
         channels.indexOfFirst { it.id == channelId }
+
+    fun restoreFocusedProgramAppearance(view: View) {
+        val parent = view.parent as? View ?: return
+        if (parent.id != R.id.programsContainer || !view.isFocused) return
+        applyProgramFocusStyle(view, true)
+    }
 
     fun getNowPlayingIndex(channelId: Int): Int {
         val now = System.currentTimeMillis() / 1000
@@ -117,7 +129,7 @@ class EpgRowAdapter(
     fun setTimelineStartTimestamp(startSeconds: Long) {
         if (timelineStartSeconds == startSeconds) return
         timelineStartSeconds = startSeconds
-        if (channels.isNotEmpty()) notifyItemRangeChanged(0, channels.size, "EPG_CLOCK")
+        if (channels.isNotEmpty()) notifyItemRangeChanged(0, channels.size, "EPG_WINDOW")
     }
 
     fun setChannelVisibilityEditMode(enabled: Boolean) {
@@ -179,7 +191,9 @@ class EpgRowAdapter(
     }
 
     override fun onBindViewHolder(holder: VH, position: Int, payloads: MutableList<Any>) {
-        if (payloads.contains("EPG_UPDATE") || payloads.contains("EPG_CLOCK")) {
+        if (payloads.contains("EPG_WINDOW")) {
+            bindInternal(holder, position, false)
+        } else if (payloads.contains("EPG_UPDATE") || payloads.contains("EPG_CLOCK")) {
             updateProgramBlocks(holder, position, true)
         } else if (payloads.contains("PLAYING_CHANGED")) {
             updatePlayingIndicator(holder, position)
@@ -332,7 +346,8 @@ class EpgRowAdapter(
         holder.container.removeAllViews()
         val inflater = LayoutInflater.from(holder.itemView.context)
 
-        val displayBlocks = blocksForDisplay(programs).ifEmpty { holdoverBlocks(programs) }
+        // Never relabel expired/current programs as future listings in a later window.
+        val displayBlocks = blocksForDisplay(programs)
 
         if (displayBlocks.isEmpty()) {
             addProgramBlock(inflater, holder.container, "No Information", guideWindowMinutes * 60L, channel, null)
@@ -417,6 +432,8 @@ class EpgRowAdapter(
 
     private fun currentTimelineStartTimestamp(): Long {
         val cal = Calendar.getInstance().apply {
+            val minute = get(Calendar.MINUTE)
+            set(Calendar.MINUTE, minute - (minute % 30))
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
@@ -481,7 +498,9 @@ class EpgRowAdapter(
     }
 
     private fun applyProgramFocusStyle(view: View, focused: Boolean) {
-        if (!focused) {
+        val shouldHighlight = focused || view.isFocused
+        view.isSelected = shouldHighlight
+        if (!shouldHighlight) {
             view.background = AppearanceTheme.epgProgramBackground(view.context)
             return
         }
@@ -517,6 +536,6 @@ class EpgRowAdapter(
         (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val guideWindowMinutes = 240
+        private const val guideWindowMinutes = EpgGuideRange.WINDOW_MINUTES
     }
 }

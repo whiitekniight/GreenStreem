@@ -6,20 +6,39 @@ class ScrollSync {
     private val rows = mutableSetOf<HorizontalScrollView>()
     var onAnyRowScrolled: ((Int) -> Unit)? = null
     private var currentX = 0
+    private var heldX: Int? = null
+    private var synchronizing = false
 
     fun getCurrentX() = currentX
 
     fun register(row: HorizontalScrollView) { rows.add(row) }
     fun unregister(row: HorizontalScrollView) { rows.remove(row) }
 
+    fun holdHorizontalPosition() { heldX = currentX }
+    fun releaseHorizontalPosition() { heldX = null }
+
     fun scrollAllTo(x: Int) {
-        currentX = x
-        for (r in rows) { if (r.scrollX != x) r.scrollTo(x, 0) }
+        synchronizeTo(heldX ?: x)
     }
 
     fun notifyRowScrolled(source: HorizontalScrollView, x: Int) {
-        currentX = x
-        for (r in rows) { if (r !== source && r.scrollX != x) r.scrollTo(x, 0) }
-        onAnyRowScrolled?.invoke(x)
+        if (synchronizing) return
+        // Up/Down must not let HorizontalScrollView's focus/layout corrections
+        // drag every row to a different time. Left/Right releases this hold.
+        synchronizeTo(heldX ?: x)
+    }
+
+    private fun synchronizeTo(x: Int) {
+        if (synchronizing) return
+        synchronizing = true
+        try {
+            currentX = x.coerceAtLeast(0)
+            for (row in rows) {
+                if (row.scrollX != currentX) row.scrollTo(currentX, 0)
+            }
+            onAnyRowScrolled?.invoke(currentX)
+        } finally {
+            synchronizing = false
+        }
     }
 }

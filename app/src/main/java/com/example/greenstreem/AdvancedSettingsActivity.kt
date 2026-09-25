@@ -452,6 +452,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
                 Spec.Toggle("epg_update_on_start", "Update EPG on app start", true),
                 Spec.Choice("epg_update_interval", "EPG update interval", listOf("2 hours", "6 hours", "12 hours", "24 hours"), 2),
                 Spec.Choice("epg_past_days", "Past days to keep EPG", listOf("1 day", "2 days", "3 days", "7 days"), 1),
+                Spec.Choice("epg_future_days", "Guide days ahead", listOf("1 day", "2 days", "3 days", "7 days"), 3),
                 Spec.Choice("epg_time_offset", "EPG time offset", listOf("-2h", "-1h", "-0:30", "0 (default)", "+0:30", "+1h", "+2h"), 3),
                 Spec.Toggle("epg_prefer_logos", "Prefer logos from EPG", false),
                 Spec.Toggle("epg_show_past_no_catchup", "Show past programs without catch-up", true),

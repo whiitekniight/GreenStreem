@@ -41,8 +41,8 @@ android {
         applicationId = "com.example.greenstreem"
         minSdk = 23
         targetSdk = 36
-        versionCode = 87
-        versionName = "1.9.51"
+        versionCode = 88
+        versionName = "1.9.52"
     }
 
     flavorDimensions += "distribution"
@@ -144,6 +144,7 @@ tasks.configureEach {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.leanback)
     implementation(libs.glide)

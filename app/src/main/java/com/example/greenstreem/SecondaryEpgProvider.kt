@@ -38,7 +38,7 @@ object SecondaryEpgProvider {
     private const val XMLTV_KEEP_PAST_SECONDS = 24 * 60 * 60L
     private const val XMLTV_KEEP_FUTURE_SECONDS = 7 * 24 * 60 * 60L
     private const val XMLTV_QUERY_PAST_SECONDS = 30 * 60L
-    private const val XMLTV_QUERY_FUTURE_SECONDS = 8 * 60 * 60L
+    private const val XMLTV_QUERY_FUTURE_SECONDS = 7 * 24 * 60 * 60L
     private const val XMLTV_INDEX_BATCH_SIZE = 250
 
     private val mutex = Mutex()
