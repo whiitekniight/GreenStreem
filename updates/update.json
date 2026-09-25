@@ -1,7 +1,6 @@
 {
-  "versionCode": 86,
-  "versionName": "1.9.50",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.50",
-  "notes": "Improves Emby Connect purchases: the activation ID, purchase instructions, and I Paid button now stay visible together, purchase requests keep GreenStreem open, and Discord staff can approve or reject requests directly inside Discord."
+  "versionCode": 87,
+  "versionName": "1.9.51",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.51",
+  "notes": "Upgraded Emby Live TV with channel categories, Favorites that open first, and smooth mini-player/fullscreen switching. Hold OK on a program to add or remove its channel from Favorites. Improved guide focus restoration, movie scrolling, and Emby movie remote controls."
 }
-

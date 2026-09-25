@@ -1662,7 +1662,9 @@ class MainActivity : FragmentActivity() {
 
     private fun handlePhoneMovieTap(): Boolean {
         if (isTvUiMode()) return false
-        if (currentState != UiState.FULL_SCREEN || currentMode == ContentMode.LIVE_TV) {
+        if (currentState != UiState.FULL_SCREEN ||
+            (currentMode == ContentMode.LIVE_TV && currentVodResumeKey == null)
+        ) {
             return false
         }
         if (movieControlsBar.visibility == View.VISIBLE && movieControlsButtons.visibility != View.VISIBLE) {
@@ -1910,7 +1912,9 @@ class MainActivity : FragmentActivity() {
         focusControls: Boolean = true,
         allowWhenControlsVisible: Boolean = false
     ): Boolean {
-        if (currentState != UiState.FULL_SCREEN || currentMode == ContentMode.LIVE_TV) {
+        if (currentState != UiState.FULL_SCREEN ||
+            (currentMode == ContentMode.LIVE_TV && currentVodResumeKey == null)
+        ) {
             return false
         }
         if (!allowWhenControlsVisible && isPlaybackOverlayOpen()) {
@@ -5556,10 +5560,10 @@ class MainActivity : FragmentActivity() {
                     if (seekMovieFromRemote(30_000L, allowWhenControlsVisible = true)) return true
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (seekMovieFromRemote(-30_000L, focusControls = false)) return true
+                    if (seekMovieFromRemote(-30_000L, focusControls = false, allowWhenControlsVisible = true)) return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (seekMovieFromRemote(30_000L, focusControls = false)) return true
+                    if (seekMovieFromRemote(30_000L, focusControls = false, allowWhenControlsVisible = true)) return true
                 }
             }
         }
@@ -5610,10 +5614,10 @@ class MainActivity : FragmentActivity() {
                 if (seekMovieFromRemote(30_000L, allowWhenControlsVisible = true)) return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (seekMovieFromRemote(-30_000L, focusControls = false)) return true
+                if (seekMovieFromRemote(-30_000L, focusControls = false, allowWhenControlsVisible = true)) return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (seekMovieFromRemote(30_000L, focusControls = false)) return true
+                if (seekMovieFromRemote(30_000L, focusControls = false, allowWhenControlsVisible = true)) return true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
                 if (movieControlsBar.visibility == View.VISIBLE &&
@@ -5827,7 +5831,9 @@ class MainActivity : FragmentActivity() {
             return true
         }
 
-        if (returnToEmbyOnBack && currentState == UiState.FULL_SCREEN) {
+        if ((returnToEmbyOnBack || currentVodResumeKey?.startsWith("emby_") == true) &&
+            currentState == UiState.FULL_SCREEN
+        ) {
             saveVodResumeProgress()
             player?.pause()
             // After a cold start MainActivity is the task root, so there may be

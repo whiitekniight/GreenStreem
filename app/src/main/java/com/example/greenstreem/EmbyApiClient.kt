@@ -39,6 +39,7 @@ object EmbyApiClient {
         val endMs: Long
     )
     data class GuideChannel(val channel: MediaEntry, val programs: List<GuideProgram>)
+    data class ChannelGroup(val id: String, val name: String)
 
     suspend fun authenticate(serverInput: String, userName: String, password: String): Result<LoginResult> =
         withContext(Dispatchers.IO) {
@@ -100,13 +101,22 @@ object EmbyApiClient {
             }
         }
 
-    suspend fun liveGuide(credentials: EmbySecureStore.Credentials): Result<List<GuideChannel>> =
+    suspend fun liveGuide(
+        credentials: EmbySecureStore.Credentials,
+        groupId: String? = null,
+        channelIds: Set<String>? = null
+    ): Result<List<GuideChannel>> =
         withContext(Dispatchers.IO) {
             runCatching {
+                if (channelIds != null && channelIds.isEmpty()) return@runCatching emptyList<GuideChannel>()
                 val channels = getItemsOrThrow(
                     credentials,
-                    "/emby/LiveTv/Channels?UserId=${encode(credentials.userId)}&Fields=Overview,ChannelNumber"
-                )
+                    "/emby/LiveTv/Channels?UserId=${encode(credentials.userId)}&Fields=Overview,ChannelNumber" +
+                        groupId?.takeIf { it.isNotBlank() }?.let {
+                            if (it.startsWith("tag:")) "&TagIds=${encode(it.removePrefix("tag:"))}"
+                            else "&ChannelGroupId=${encode(it)}"
+                        }.orEmpty()
+                ).filter { channelIds == null || it.id in channelIds }
                 val now = Date()
                 val later = Date(now.time + 4L * 60L * 60L * 1000L)
                 val requestFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
@@ -132,6 +142,43 @@ object EmbyApiClient {
                 }
                 channels.map { channel ->
                     GuideChannel(channel, byChannel[channel.id].orEmpty().sortedBy { it.startMs })
+                }
+            }
+        }
+
+    suspend fun channelGroups(credentials: EmbySecureStore.Credentials): Result<List<ChannelGroup>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val tagged = runCatching {
+                    val result = mutableListOf<ChannelGroup>()
+                    var offset = 0
+                    do {
+                        val response = requestJson(credentials,
+                            "/emby/Items?UserId=${encode(credentials.userId)}&IncludeItemTypes=TvChannel" +
+                                "&Recursive=true&GroupItemsInto=Tags&SortBy=SortName&SortOrder=Ascending&Limit=200&StartIndex=$offset")
+                        val items = response.optJSONArray("Items") ?: JSONArray()
+                        for (index in 0 until items.length()) {
+                            val item = items.optJSONObject(index) ?: continue
+                            if (item.optString("Type") != "Tag") continue
+                            val id = item.optString("Id")
+                            val name = item.optString("Name")
+                            if (id.isNotBlank() && name.isNotBlank()) result.add(ChannelGroup("tag:$id", name))
+                        }
+                        offset += items.length()
+                    } while (items.length() > 0 && offset < response.optInt("TotalRecordCount", offset))
+                    result.distinctBy { it.name.lowercase(Locale.ROOT) }
+                }.getOrDefault(emptyList())
+                if (tagged.isNotEmpty()) tagged else {
+                    val items = requestJson(credentials,
+                        "/emby/LiveTv/ChannelGroups?UserId=${encode(credentials.userId)}").optJSONArray("Items") ?: JSONArray()
+                    buildList {
+                        for (index in 0 until items.length()) {
+                            val item = items.optJSONObject(index) ?: continue
+                            val id = item.optString("Id")
+                            val name = item.optString("Name")
+                            if (id.isNotBlank() && name.isNotBlank()) add(ChannelGroup(id, name))
+                        }
+                    }
                 }
             }
         }
@@ -308,7 +355,7 @@ object EmbyApiClient {
         return client.newCall(request).execute().use { response ->
             val text = response.body.string()
             if (!response.isSuccessful) error("Emby request failed (${response.code})")
-            JSONObject(text)
+            if (text.trimStart().startsWith("[")) JSONObject().put("Items", JSONArray(text)) else JSONObject(text)
         }
     }
 
