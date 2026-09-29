@@ -1,6 +1,6 @@
 {
-  "versionCode": 88,
-  "versionName": "1.9.52",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.52",
-  "notes": "Fixed guide scrolling with a stationary indicator near the left edge. Browse up to seven days of available listings using Guide day / time. Fixed Left/Right navigation across playback controls, including Subtitles, while preserving repeated movie skips when the buttons are closed."
+  "versionCode": 89,
+  "versionName": "1.9.53",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.53",
+  "notes": "Urgent branded IPTV server address update. Existing profiles using the retired branded server automatically move to the new address while keeping saved login details and preferences."
 }

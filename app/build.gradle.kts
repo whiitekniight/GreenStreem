@@ -41,8 +41,8 @@ android {
         applicationId = "com.example.greenstreem"
         minSdk = 23
         targetSdk = 36
-        versionCode = 88
-        versionName = "1.9.52"
+        versionCode = 89
+        versionName = "1.9.53"
     }
 
     flavorDimensions += "distribution"
@@ -61,7 +61,7 @@ android {
             buildConfigField("boolean", "PLAY_STORE_BUILD", "false")
             buildConfigField("boolean", "SIDELOAD_PRO_UNLOCKED", "true")
             buildConfigField("boolean", "BRANDED_SERVER_LOCKED", "true")
-            buildConfigField("String", "BRANDED_SERVER_URL", "\"https://kennye71.trustissues.life\"")
+            buildConfigField("String", "BRANDED_SERVER_URL", "\"https://totallyfucked.freindmts.com\"")
         }
         create("play") {
             dimension = "distribution"
