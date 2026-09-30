@@ -44,10 +44,7 @@ class EpgRowAdapter(
     var focusedRowPosition: Int = RecyclerView.NO_POSITION
         set(value) {
             val normalized = if (value in channels.indices) value else RecyclerView.NO_POSITION
-            if (field == normalized) {
-                notifyRowFocusChanged(normalized)
-                return
-            }
+            if (field == normalized) return
             val previous = field
             field = normalized
             notifyRowFocusChanged(previous)
@@ -70,12 +67,22 @@ class EpgRowAdapter(
         val hsv: HorizontalScrollView = v.findViewById(R.id.hsvRow)
         val container: LinearLayout = v.findViewById(R.id.programsContainer)
         var boundChannelId: Long? = null
+
+        init {
+            tvName.isSingleLine = true
+        }
     }
 
-    fun setData(newChannels: List<Channel>) {
+    fun setData(
+        newChannels: List<Channel>,
+        cachedPrograms: Map<Int, List<XtreamEpgListing>> = emptyMap()
+    ) {
         val previouslyFocusedChannelId = channels.getOrNull(focusedRowPosition)?.id
         val previousFocusedPosition = focusedRowPosition
         channelPrograms.clear()
+        newChannels.forEach { channel ->
+            cachedPrograms[channel.id.toInt()]?.let { channelPrograms[channel.id.toInt()] = it }
+        }
         deferredFocusedRowUpdates.clear()
         this.channels = newChannels
         focusedRowPosition = previouslyFocusedChannelId
@@ -303,7 +310,6 @@ class EpgRowAdapter(
         holder.tvName.setTextColor(if (focused) accent else Color.WHITE)
         holder.tvName.ellipsize = if (focused) TextUtils.TruncateAt.MARQUEE else TextUtils.TruncateAt.END
         holder.tvName.marqueeRepeatLimit = if (focused) -1 else 0
-        holder.tvName.isSingleLine = true
         holder.tvName.isSelected = focused
         holder.itemView.isSelected = focused
         holder.channelInfo.background = null
@@ -343,18 +349,21 @@ class EpgRowAdapter(
             }
         }
 
-        holder.container.removeAllViews()
         val inflater = LayoutInflater.from(holder.itemView.context)
 
         // Never relabel expired/current programs as future listings in a later window.
         val displayBlocks = blocksForDisplay(programs)
 
         if (displayBlocks.isEmpty()) {
-            addProgramBlock(inflater, holder.container, "No Information", guideWindowMinutes * 60L, channel, null)
+            bindProgramBlock(inflater, holder.container, 0, "No Information", guideWindowMinutes * 60L, channel, null)
         } else {
-            displayBlocks.forEach { block ->
-                addProgramBlock(inflater, holder.container, block.title, block.durationSec, channel, block.listing)
+            displayBlocks.forEachIndexed { index, block ->
+                bindProgramBlock(inflater, holder.container, index, block.title, block.durationSec, channel, block.listing)
             }
+        }
+        val blockCount = displayBlocks.size.coerceAtLeast(1)
+        if (holder.container.childCount > blockCount) {
+            holder.container.removeViews(blockCount, holder.container.childCount - blockCount)
         }
         if (restoreFocusAfterPlaceholder) {
             // Binding can happen while RecyclerView is computing its layout. A
@@ -449,8 +458,15 @@ class EpgRowAdapter(
         return false
     }
 
-    private fun addProgramBlock(inflater: LayoutInflater, container: LinearLayout, title: String, durationSec: Long, channel: Channel, listing: XtreamEpgListing?) {
-        val view = inflater.inflate(R.layout.item_epg_program, container, false)
+    private fun bindProgramBlock(inflater: LayoutInflater, container: LinearLayout, index: Int, title: String, durationSec: Long, channel: Channel, listing: XtreamEpgListing?) {
+        // Reuse the row's cards as RecyclerView rebinds channels instead of
+        // inflating the entire four-hour guide again on each vertical step.
+        val view = container.getChildAt(index)
+            ?: inflater.inflate(R.layout.item_epg_program, container, false)
+        view.animate().cancel()
+        view.scaleX = 1f
+        view.scaleY = if (view.isFocused) 1.04f else 1f
+        view.elevation = if (view.isFocused) 6f else 0f
         applyProgramFocusStyle(view, false)
         val tvTitle = view.findViewById<TextView>(R.id.tvProgramTitle)
         tvTitle.text = title
@@ -458,7 +474,9 @@ class EpgRowAdapter(
         tvTitle.setTypeface(null, android.graphics.Typeface.NORMAL)
 
         val width = ((durationSec / 60f) * pxPerMinute).toInt().coerceAtLeast(1)
-        view.layoutParams = LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT)
+        if (view.layoutParams.width != width) {
+            view.layoutParams = LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
         // Keep clipped timeline slivers visible, but do not make the remote stop
         // on a card too narrow to identify or select reliably.
         view.isFocusable = width >= view.context.dp(24)
@@ -494,7 +512,7 @@ class EpgRowAdapter(
                 view.elevation = 0f
             }
         }
-        container.addView(view)
+        if (view.parent == null) container.addView(view)
     }
 
     private fun applyProgramFocusStyle(view: View, focused: Boolean) {
@@ -522,7 +540,12 @@ class EpgRowAdapter(
         holder.itemView.scaleY = 1f
         holder.itemView.elevation = 0f
         applyChannelFocusStyle(holder, false)
-        holder.container.removeAllViews()
+        holder.container.children.forEach { card ->
+            card.animate().cancel()
+            card.setOnClickListener(null)
+            card.setOnLongClickListener(null)
+            card.onFocusChangeListener = null
+        }
         Glide.with(holder.itemView.context).clear(holder.ivLogo)
     }
 

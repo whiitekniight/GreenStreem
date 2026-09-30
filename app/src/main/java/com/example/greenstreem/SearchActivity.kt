@@ -233,7 +233,7 @@ class SearchActivity : AppCompatActivity() {
                 if (searchActivityStopped) return
                 if (response.isSuccessful) {
                     allChannels = response.body()?.map { stream ->
-                        Channel(id = stream.streamId.toLong(), name = stream.name, group = "", logoUrl = stream.streamIcon, streamUrl = "", epgId = stream.epgId, number = stream.num)
+                        Channel(id = stream.streamId.toLong(), name = stream.name, group = stream.categoryId.orEmpty(), logoUrl = stream.streamIcon, streamUrl = "", epgId = stream.epgId, number = stream.num)
                     } ?: emptyList()
                     loadCachedProgramSearchIndex()
                     rerunVisibleSearch()

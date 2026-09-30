@@ -505,6 +505,7 @@ class MainActivity : FragmentActivity() {
         btnNextEpisodeAuto = findViewById(R.id.btnNextEpisodeAuto) ?: return
         navRail = findViewById(R.id.navRail) ?: return
         rvCategories = findViewById(R.id.rvCategories) ?: return
+        rvCategories.setHasFixedSize(true)
         rvRecentChannels = findViewById(R.id.rvRecentChannels) ?: return
         rvContent = findViewById(R.id.rvEpg) ?: return
         hsvTimeRuler = findViewById(R.id.hsvTimeRuler) ?: return
@@ -617,12 +618,9 @@ class MainActivity : FragmentActivity() {
             }
         )
 
-        @Suppress("DEPRECATION")
-        val playChannelExtra = intent.getSerializableExtra("play_channel") as? Channel
         val startedInitialPlayback = if (handleSearchMovieDetailsIntent(intent)) {
             false
-        } else if (playChannelExtra != null) {
-            playChannel(playChannelExtra)
+        } else if (handleSearchChannelIntent(intent)) {
             true
         } else if (handleExternalPlaybackIntent(intent)) {
             // handled by external VOD/series playback intent
@@ -715,9 +713,22 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (!handleSearchMovieDetailsIntent(intent)) {
+        if (!handleSearchMovieDetailsIntent(intent) && !handleSearchChannelIntent(intent)) {
             handleExternalPlaybackIntent(intent)
         }
+    }
+
+    private fun handleSearchChannelIntent(intent: Intent?): Boolean {
+        @Suppress("DEPRECATION")
+        val channel = intent?.getSerializableExtra("play_channel") as? Channel ?: return false
+        intent.removeExtra("play_channel")
+        if (currentMode != ContentMode.LIVE_TV) switchMode(ContentMode.LIVE_TV)
+        returnToEmbyOnBack = false
+        // Search returns to the existing activity. Start the selected stream even
+        // when it is the same channel that Search paused, then show playback.
+        playChannel(channel, openInGuide = false)
+        updateUiState(UiState.FULL_SCREEN)
+        return true
     }
 
     override fun onUserLeaveHint() {
@@ -1452,7 +1463,7 @@ class MainActivity : FragmentActivity() {
         isChannelVisibilityEditMode = true
 
         currentLiveChannels = sortedChannels
-        epgAdapter.setData(sortedChannels)
+        epgAdapter.setData(sortedChannels, epgCacheByStreamId)
         epgAdapter.setChannelVisibilityEditMode(true)
         epgAdapter.setHiddenChannelIds(visibilityHiddenIds.toSet())
         updateUiState(UiState.EPG_GRID)
@@ -3109,6 +3120,7 @@ class MainActivity : FragmentActivity() {
 
     private fun fetchContentForCategory(category: XtreamCategory) {
         if (isPlaylistHeader(category)) return
+        hoverRunnable?.let { hoverHandler.removeCallbacks(it) }
         if (currentMode != ContentMode.LIVE_TV) {
             currentLibraryCategoryName = category.name
         }
@@ -3128,9 +3140,11 @@ class MainActivity : FragmentActivity() {
                         ?: Channel(id = fav.streamId.toLong(), name = fav.name, group = "favorites", logoUrl = fav.streamIcon, streamUrl = "", epgId = fav.epgId)
                 }
                 val sortedChannels = applyLiveChannelSort(channels, category.id)
+                if (generation != contentFetchGeneration) return@launch
                 if (rvContent.adapter != epgAdapter) {
                     rvContent.layoutManager = LinearLayoutManager(this@MainActivity)
                     rvContent.adapter = epgAdapter
+                    rvContent.setHasFixedSize(true)
                     rvContent.itemAnimator = null
                 }
                 currentLiveChannels = sortedChannels
@@ -3139,8 +3153,9 @@ class MainActivity : FragmentActivity() {
                 if (currentLiveChannelIndex != -1) {
                     rememberLivePlaybackLaunchCategory(currentChannel!!.id, category.id)
                 }
-                epgAdapter.setData(sortedChannels)
+                epgAdapter.setData(sortedChannels, epgCacheByStreamId)
                 hydrateEpgCacheFromDisk(sortedChannels)
+                if (generation != contentFetchGeneration) return@launch
                 enqueueInitialEpgForChannels(sortedChannels)
                 maybeRunPendingEpgRefresh()
                 refreshRecentChannelsRow()
@@ -3156,6 +3171,7 @@ class MainActivity : FragmentActivity() {
                 if (rvContent.adapter != epgAdapter) {
                     rvContent.layoutManager = LinearLayoutManager(this@MainActivity)
                     rvContent.adapter = epgAdapter
+                    rvContent.setHasFixedSize(true)
                     rvContent.itemAnimator = null
                 }
                 currentLiveChannels = channels
@@ -3164,8 +3180,9 @@ class MainActivity : FragmentActivity() {
                 if (currentLiveChannelIndex != -1) {
                     rememberLivePlaybackLaunchCategory(currentChannel!!.id, category.id)
                 }
-                epgAdapter.setData(channels)
+                epgAdapter.setData(channels, epgCacheByStreamId)
                 hydrateEpgCacheFromDisk(channels)
+                if (generation != contentFetchGeneration) return@launch
                 enqueueInitialEpgForChannels(channels)
                 maybeRunPendingEpgRefresh()
                 refreshRecentChannelsRow()
@@ -3243,6 +3260,7 @@ class MainActivity : FragmentActivity() {
                 if (rvContent.adapter != epgAdapter) {
                     rvContent.layoutManager = LinearLayoutManager(this)
                     rvContent.adapter = epgAdapter
+                    rvContent.setHasFixedSize(true)
                     rvContent.itemAnimator = null
                 }
                 val cached = cachedLiveStreams?.get(category.id)
@@ -3336,14 +3354,16 @@ class MainActivity : FragmentActivity() {
                 )
             }
             val sortedChannels = applyLiveChannelSort(channels, categoryId)
+            if (generation != contentFetchGeneration) return@launch
             currentLiveCategoryId = categoryId
             currentLiveChannels = sortedChannels
             if (currentChannel?.name == "Resuming..." || sortedChannels.any { it.id == currentChannel?.id }) {
                 syncCurrentLiveChannelFromCachedStreams()
             }
             currentLiveChannelIndex = sortedChannels.indexOfFirst { it.id == currentChannel?.id }
-            epgAdapter.setData(sortedChannels)
+            epgAdapter.setData(sortedChannels, epgCacheByStreamId)
             hydrateEpgCacheFromDisk(sortedChannels)
+            if (generation != contentFetchGeneration) return@launch
             enqueueInitialEpgForChannels(sortedChannels)
             maybeRunPendingEpgRefresh()
             // Paint cached EPG immediately so rows fill instantly while network refresh runs.
@@ -3887,6 +3907,7 @@ class MainActivity : FragmentActivity() {
             if (rvContent.adapter != epgAdapter) {
                 rvContent.layoutManager = LinearLayoutManager(this@MainActivity)
                 rvContent.adapter = epgAdapter
+                rvContent.setHasFixedSize(true)
                 rvContent.itemAnimator = null
             }
             val hiddenChannels = db.hiddenChannelDao().getAllHidden().first().map { it.channelId }.toSet()
@@ -3895,11 +3916,13 @@ class MainActivity : FragmentActivity() {
                 channels.filter { it.id !in hiddenChannels },
                 categoryId
             )
+            if (generation != contentFetchGeneration) return@launch
             currentLiveCategoryId = categoryId
             currentLiveChannels = sortedChannels
             currentLiveChannelIndex = sortedChannels.indexOfFirst { it.id == currentChannel?.id }
-            epgAdapter.setData(sortedChannels)
+            epgAdapter.setData(sortedChannels, epgCacheByStreamId)
             hydrateEpgCacheFromDisk(sortedChannels)
+            if (generation != contentFetchGeneration) return@launch
             sortedChannels.forEach { ch ->
                 val cached = epgCacheByStreamId[ch.id.toInt()]
                 if (!cached.isNullOrEmpty()) {
@@ -3987,18 +4010,18 @@ class MainActivity : FragmentActivity() {
             db.epgCacheDao().deleteOlderThan(cutoff)
             ids.chunked(400).flatMap { chunk ->
                 db.epgCacheDao().getByStreamIds(chunk)
+            }.filter { it.updatedAtMs >= cutoff }.map { entry ->
+                entry.streamId to parseEpgListingsJson(entry.listingsJson)
             }
         }
         val hydratedIds = mutableSetOf<Int>()
-        entries.forEach { entry ->
-            if (entry.updatedAtMs < cutoff) return@forEach
-            val parsed = parseEpgListingsJson(entry.listingsJson)
+        entries.forEach { (streamId, parsed) ->
             if (parsed.isNotEmpty()) {
-                epgCacheByStreamId[entry.streamId] = parsed
-                setEpgDataBuffered(entry.streamId, parsed)
+                epgCacheByStreamId[streamId] = parsed
+                setEpgDataBuffered(streamId, parsed)
             }
             if (parsed.hasCurrentGuideWindowListings()) {
-                hydratedIds.add(entry.streamId)
+                hydratedIds.add(streamId)
             }
         }
         lifecycleScope.launch {
@@ -5870,7 +5893,7 @@ class MainActivity : FragmentActivity() {
                     if (currentMode == ContentMode.LIVE_TV && shouldOpenPlayingChannelFromCategories()) {
                         enterLiveGuideAtCurrentChannel()
                     } else {
-                        loadFocusedCategoryIfApplicable()
+                        loadFocusedCategoryIfApplicable(immediate = true)
                         if (currentMode == ContentMode.LIVE_TV) {
                             restoreLiveFocusForSelectedCategory()
                         }
@@ -6557,15 +6580,19 @@ class MainActivity : FragmentActivity() {
 
     private fun onCategoryFocused(category: XtreamCategory) {
         hoverRunnable?.let { hoverHandler.removeCallbacks(it) }
+        // Invalidate the previous group as soon as focus moves, including work
+        // awaiting the disk cache, and avoid rebuilding groups passed on a hold.
+        ++contentFetchGeneration
+        currentContentCall?.cancel()
         hoverRunnable = Runnable { fetchContentForCategory(category) }
         hoverHandler.postDelayed(
             hoverRunnable!!,
-            if (currentMode == ContentMode.LIVE_TV) 70L else 260L
+            if (currentMode == ContentMode.LIVE_TV) 180L else 260L
         )
     }
 
     private fun openFocusedCategory() {
-        loadFocusedCategoryIfApplicable()
+        loadFocusedCategoryIfApplicable(immediate = true)
         if (currentMode == ContentMode.LIVE_TV) {
             restoreLiveFocusForSelectedCategory()
         }
@@ -6984,14 +7011,14 @@ class MainActivity : FragmentActivity() {
         ContentMode.LIVE_TV -> KEY_LAST_LIVE_FOCUSED_ROW
     }
 
-    private fun loadFocusedCategoryIfApplicable() {
+    private fun loadFocusedCategoryIfApplicable(immediate: Boolean = false) {
         val focused = currentFocus ?: return
         val view = rvCategories.findContainingItemView(focused) ?: return
         val pos = rvCategories.getChildAdapterPosition(view)
         if (pos == RecyclerView.NO_POSITION) return
         categoryAdapter.getItemAt(pos)?.let { 
             lastCategoryPosition = pos
-            onCategoryFocused(it) 
+            if (immediate) fetchContentForCategory(it) else onCategoryFocused(it)
         }
     }
 
