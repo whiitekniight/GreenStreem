@@ -7424,10 +7424,18 @@ class MainActivity : FragmentActivity() {
             val format = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
                 .getString(KEY_LIVE_STREAM_FORMAT, LIVE_STREAM_FORMAT_TS)
             val alternateFormat = if (format == LIVE_STREAM_FORMAT_HLS) LIVE_STREAM_FORMAT_TS else LIVE_STREAM_FORMAT_HLS
-            val baseUrls = listOfNotNull(
-                alternateBaseUrlWithoutPort(XtreamManager.baseUrl),
-                XtreamManager.baseUrl
-            ).distinct()
+            // The branded endpoint includes its required HTTPS port. Do not
+            // silently try a different endpoint on the default port first.
+            val baseUrls = if (BuildConfig.BRANDED_SERVER_LOCKED &&
+                XtreamManager.baseUrl.trimEnd('/') == BuildConfig.BRANDED_SERVER_URL.trimEnd('/')
+            ) {
+                listOf(XtreamManager.baseUrl)
+            } else {
+                listOfNotNull(
+                    alternateBaseUrlWithoutPort(XtreamManager.baseUrl),
+                    XtreamManager.baseUrl
+                ).distinct()
+            }
             val formats = if (format == LIVE_STREAM_FORMAT_HLS) {
                 listOf(format, alternateFormat)
             } else {

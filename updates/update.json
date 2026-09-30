@@ -1,6 +1,6 @@
 {
-  "versionCode": 90,
-  "versionName": "1.9.54",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.54",
-  "notes": "Fixes live TV search results failing to start playback. Improves guide responsiveness during group changes by moving cached guide parsing off the UI thread and preventing older group loads from restoring stale selections."
+  "versionCode": 91,
+  "versionName": "1.9.55",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.55",
+  "notes": "Updates the branded IPTV server to the new HTTPS address on port 8443. Existing profiles and saved playback URLs using either previous branded address migrate automatically, preserving login details and preferences."
 }

@@ -9,7 +9,7 @@ internal object BrandedServerMigration {
         val prefs = context.getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
         val editor = prefs.edit()
         var changed = false
-        for (key in listOf("server_url", "m3u_url")) {
+        for (key in listOf("server_url", "m3u_url", "last_playback_url")) {
             val old = prefs.getString(key, null) ?: continue
             val next = migrate(old)
             if (next != old) { editor.putString(key, next); changed = true }
