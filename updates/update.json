@@ -1,6 +1,6 @@
 {
-  "versionCode": 91,
-  "versionName": "1.9.55",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.55",
-  "notes": "Updates the branded IPTV server to the new HTTPS address on port 8443. Existing profiles and saved playback URLs using either previous branded address migrate automatically, preserving login details and preferences."
+  "versionCode": 92,
+  "versionName": "1.9.56",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.56",
+  "notes": "Restores the previous branded IPTV server address. Profiles and saved playback URLs using the temporary server migrate automatically, preserving login details and preferences."
 }

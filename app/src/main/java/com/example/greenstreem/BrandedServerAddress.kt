@@ -4,7 +4,7 @@ import java.net.URI
 
 /** Only migrate the retired branded provider, preserving paths and user data. */
 internal object BrandedServerAddress {
-    private val retiredHosts = setOf("kennye71.trustissues.life", "totallyfucked.freindmts.com")
+    private val retiredHosts = setOf("kennye71.trustissues.life", "thisisnotreal.ryvox.cc")
 
     fun migrate(value: String, branded: Boolean, replacement: String): String {
         if (!branded || replacement.isBlank()) return value
