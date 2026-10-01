@@ -4,7 +4,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class BrandedServerAddressTest {
-    private val next = "https://totallyfucked.freindmts.com"
+    private val next = "https://totallyfucked.zyven.link"
+    @Test fun migratesRetiredFreindmtsHostWithoutChangingOtherProviders() {
+        assertEquals("$next/live/user/pass/123.ts?x=test%2Bvalue#saved", BrandedServerAddress.migrate(
+            "https://totallyfucked.freindmts.com/live/user/pass/123.ts?x=test%2Bvalue#saved", true, next))
+        for (url in listOf("https://totallyfucked.freindmts.com.other.example", "https://user@totallyfucked.freindmts.com")) {
+            assertEquals(url, BrandedServerAddress.migrate(url, true, next))
+        }
+        val old = "https://totallyfucked.freindmts.com"
+        assertEquals(old, BrandedServerAddress.migrate(old, false, next))
+    }
     @Test fun migratesPreviousProviderIncludingItsPortAndSavedPlayback() {
         assertEquals("$next/live/user/pass/123.ts", BrandedServerAddress.migrate(
             "https://thisisnotreal.ryvox.cc:8443/live/user/pass/123.ts", true, next))

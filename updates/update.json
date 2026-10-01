@@ -1,6 +1,6 @@
 {
-  "versionCode": 92,
-  "versionName": "1.9.56",
-  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.56",
-  "notes": "Restores the previous branded IPTV server address. Profiles and saved playback URLs using the temporary server migrate automatically, preserving login details and preferences."
+  "versionCode": 93,
+  "versionName": "1.9.57",
+  "apkUrl": "https://greenstreemlabs.com/downloads/greenstreem-customer.apk?v=1.9.57",
+  "notes": "Updates the branded IPTV server address. Existing profiles and saved playback URLs migrate automatically, preserving login details and preferences."
 }
