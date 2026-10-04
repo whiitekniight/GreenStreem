@@ -17,9 +17,19 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
 class GreenStreemApplication : Application() {
+    private var foregroundActivity: java.lang.ref.WeakReference<Activity>? = null
+    private val maintenanceListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if(key=="dashboard_maintenance") Handler(Looper.getMainLooper()).post { foregroundActivity?.get()?.let { showMaintenance(it) } }
+    }
+    private fun showMaintenance(activity: Activity) {
+        if(activity !is MaintenanceActivity && !activity.isFinishing && getSharedPreferences("iptv_prefs",Context.MODE_PRIVATE).getBoolean("dashboard_maintenance",false)) {
+            activity.startActivity(android.content.Intent(activity,MaintenanceActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NO_USER_ACTION))
+        }
+    }
     override fun onCreate() {
         super.onCreate()
         BrandedServerMigration.apply(this)
+        getSharedPreferences("iptv_prefs",Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(maintenanceListener)
         CloudBackupScheduler.scheduleAsync(this)
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
@@ -27,11 +37,13 @@ class GreenStreemApplication : Application() {
             }
 
             override fun onActivityResumed(activity: Activity) {
+                foregroundActivity=java.lang.ref.WeakReference(activity)
+                showMaintenance(activity)
                 activity.applyGreenStreemFullscreenSafely()
             }
 
             override fun onActivityStarted(activity: Activity) = Unit
-            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) { if(foregroundActivity?.get()===activity) foregroundActivity=null }
             override fun onActivityStopped(activity: Activity) = Unit
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
             override fun onActivityDestroyed(activity: Activity) = Unit

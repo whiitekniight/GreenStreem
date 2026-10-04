@@ -863,10 +863,13 @@ class MainActivity : FragmentActivity() {
                 "Hide Channel",
                 "Show all hidden channels"
             )
+            val visibility = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+            val visibleOptions = options.filterIndexed { index, _ -> visibility.getBoolean("dashboard_channel_$index", true) }.toTypedArray()
+            if (visibleOptions.isEmpty()) return@launch
             AlertDialog.Builder(this@MainActivity)
                 .setTitle(ChannelNameFormatter.format(this@MainActivity, channel.name))
-                .setItems(options) { _, which ->
-                    handleOptionSelection(options[which], channel)
+                .setItems(visibleOptions) { _, which ->
+                    handleOptionSelection(visibleOptions[which], channel)
                 }
                 .show()
         }
@@ -883,10 +886,13 @@ class MainActivity : FragmentActivity() {
             "Subtitle tracks",
             "Sleep timer"
         )
+        val visibility = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+        val visibleIndices = options.indices.filter { visibility.getBoolean("dashboard_quick_$it", true) }
+        if (visibleIndices.isEmpty()) return
         AlertDialog.Builder(this)
             .setTitle("Quick Panel")
-            .setItems(options) { _, which ->
-                when (which) {
+            .setItems(visibleIndices.map { options[it] }.toTypedArray()) { _, which ->
+                when (visibleIndices[which]) {
                     0 -> showGuideDayPicker(guideRow)
                     1 -> {
                         val channel = currentChannel ?: getFocusedEpgChannel()
@@ -2611,7 +2617,7 @@ class MainActivity : FragmentActivity() {
                     categories.add(0, XtreamCategory(ALL_SERIES_ID, "All series", 0))
                     categories.add(0, XtreamCategory(MY_LIST_SERIES_ID, "My List", 0))
                 }
-                val rows = buildPlaylistCategoryRows(categories)
+                val rows = buildPlaylistCategoryRows(if(requestedMode == ContentMode.LIVE_TV) RemoteGroups.categories(this@MainActivity,categories) else categories)
                 categoryAdapter.submitList(rows)
                 val restoreCategoryId = if (requestedMode == ContentMode.LIVE_TV) {
                     resolveLiveCategoryId(currentChannel)
@@ -2698,7 +2704,7 @@ class MainActivity : FragmentActivity() {
                             filtered.add(0, XtreamCategory(MY_LIST_SERIES_ID, "My List", 0))
                         }
 
-                        val rows = buildPlaylistCategoryRows(filtered)
+                        val rows = buildPlaylistCategoryRows(if(requestedMode == ContentMode.LIVE_TV) RemoteGroups.categories(this@MainActivity,filtered) else filtered)
                         categoryAdapter.submitList(rows)
                         logLibraryCategorySnapshot(rawCategories, rows, requestedMode)
                         ensureLibraryCategoryBackfill(rawCategories, generation, requestedMode)
@@ -3128,6 +3134,26 @@ class MainActivity : FragmentActivity() {
         val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
         val lastChanId = prefs.getLong("last_channel_id", -1L)
         currentContentCall?.cancel()
+
+        if (currentMode == ContentMode.LIVE_TV && category.id.startsWith(RemoteGroups.PREFIX)) {
+            val ids = RemoteGroups.channels(this,category.id)
+            if(isM3uPlaylist()) {
+                lifecycleScope.launch {
+                    showM3uLiveStreams(loadM3uChannelsForMode(ContentMode.LIVE_TV).filter { it.id in ids },category.id,prefs,lastChanId,generation)
+                }
+            } else {
+                val service=XtreamManager.getService() ?: return
+                val call=service.getLiveStreams(XtreamManager.username,XtreamManager.password,null)
+                currentContentCall=call
+                call.enqueue(object: Callback<List<XtreamLiveStream>> {
+                    override fun onResponse(call: Call<List<XtreamLiveStream>>, response: Response<List<XtreamLiveStream>>) {
+                        if(generation==contentFetchGeneration && response.isSuccessful) showLiveStreams(response.body().orEmpty().filter { it.streamId.toLong() in ids },category.id,prefs,lastChanId,generation)
+                    }
+                    override fun onFailure(call: Call<List<XtreamLiveStream>>, t: Throwable) { }
+                })
+            }
+            return
+        }
 
         if (category.id == "favorites") {
             lifecycleScope.launch {

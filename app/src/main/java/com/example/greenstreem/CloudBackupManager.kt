@@ -1,5 +1,6 @@
 package com.example.greenstreem
 
+import androidx.room.withTransaction
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
@@ -175,7 +176,8 @@ object CloudBackupManager {
                     "set_management_state" -> {
                         applyManagementState(context, payload)
                         stateChanged = true
-                        "playlist controls applied"
+                        if (payload.has("playlists")) restartRequested = true
+                        "management changes applied"
                     }
                     "sync_settings" -> {
                         stateChanged = true
@@ -201,6 +203,7 @@ object CloudBackupManager {
             }
         }
         if (restartRequested) {
+            lastManagementStateUpload.set(0L)
             Log.i(TAG, "Restarting app from dashboard command")
             val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 ?: error("App launch intent unavailable")
@@ -237,7 +240,21 @@ object CloudBackupManager {
         val categoryNames = catalog.categories.associate { it.id to it.name }
         val categories = catalog.categories.sortedBy { order[it.id]?.position ?: Int.MAX_VALUE }
         val favorites = db.favoriteDao().getAll().first()
-        val state = JSONObject().put("version", 1)
+        val state = JSONObject().put("version", 2)
+        state.put("capabilities", JSONArray(listOf("settings", "hiddenChannels", "playlists", "customGroups", "pinnedGroups", "maintenance")))
+        val remotePrefs=context.getSharedPreferences("iptv_prefs",Context.MODE_PRIVATE)
+        state.put("maintenance",JSONObject().put("enabled",remotePrefs.getBoolean("dashboard_maintenance",false)).put("message",remotePrefs.getString("dashboard_maintenance_message","")).put("support",remotePrefs.getString("dashboard_maintenance_support","")))
+        state.put("customGroups", RemoteGroups.read(context,"customGroups"))
+        state.put("pinnedGroups", RemoteGroups.read(context,"pinnedGroups"))
+        state.put("settings", RemoteManagementSettings.snapshot(context))
+        state.put("playlists", JSONArray().apply {
+            PlaylistProfilesManager.loadProfiles(context).forEach { profile ->
+                put(JSONObject().put("id",profile.id).put("name",profile.name).put("active",profile.id==PlaylistProfilesManager.getActiveProfileId(context)))
+            }
+        })
+        state.put("hiddenChannels", JSONArray().apply {
+            db.hiddenChannelDao().getAllHidden().first().forEach { put(JSONObject().put("streamId",it.channelId).put("name",it.name)) }
+        })
         state.put("categories", JSONArray().apply {
             categories.forEachIndexed { position, category ->
                 put(JSONObject().put("id", category.id).put("name", category.name).put("hidden", hidden.containsKey(category.id)).put("position", position))
@@ -287,7 +304,28 @@ object CloudBackupManager {
 
     private suspend fun applyManagementState(context: Context, payload: JSONObject) {
         val db = AppDatabase.getDatabase(context)
-        val categories = payload.optJSONArray("categories") ?: JSONArray()
+        val allowed=setOf("categories","favorites","settings","hiddenChannels","customGroups","pinnedGroups","playlists","maintenance")
+        payload.keys().forEach { require(it in allowed) { "Unsupported management field" } }
+        require(!payload.has("playlists") || payload.length()==1) { "Provision playlists separately from other settings" }
+        payload.optJSONObject("settings")?.let { RemoteManagementSettings.validate(it) }
+        for(key in listOf("categories","favorites","hiddenChannels","customGroups","pinnedGroups")) if(payload.has(key)) {
+            val rows=payload.getJSONArray(key)
+            require(rows.length()<=10000) { "Too many entries" }
+            if(key=="customGroups" || key=="pinnedGroups") RemoteGroups.validate(key,rows)
+            else for(i in 0 until rows.length()) {
+                val row=rows.getJSONObject(i)
+                if(key=="categories") require(row.get("id") is String && row.getString("id").isNotBlank() && row.get("hidden") is Boolean && row.get("position") is Number)
+                else require(row.get("streamId") is Number && row.get("name") is String)
+            }
+        }
+        if(payload.has("settings")) RemoteManagementSettings.validate(payload.getJSONObject("settings"))
+        if(payload.has("maintenance")) {
+            val value=payload.getJSONObject("maintenance")
+            require(value.get("enabled") is Boolean && value.optString("message").length<=1000 && value.optString("support").length<=100)
+        }
+        db.withTransaction {
+        if (payload.has("categories")) {
+        val categories = payload.getJSONArray("categories")
         val hiddenGroups = mutableListOf<HiddenGroup>()
         val groupOrder = mutableListOf<GroupOrder>()
         for (index in 0 until categories.length()) {
@@ -302,7 +340,9 @@ object CloudBackupManager {
         db.groupOrderDao().clearAllOrder()
         if (groupOrder.isNotEmpty()) db.groupOrderDao().saveOrder(groupOrder)
 
-        val favoritesJson = payload.optJSONArray("favorites") ?: JSONArray()
+        }
+        if (payload.has("favorites")) {
+        val favoritesJson = payload.getJSONArray("favorites")
         val favorites = mutableListOf<Favorite>()
         for (index in 0 until favoritesJson.length()) {
             val item = favoritesJson.optJSONObject(index) ?: continue
@@ -319,6 +359,49 @@ object CloudBackupManager {
         }
         db.favoriteDao().clearAll()
         if (favorites.isNotEmpty()) db.favoriteDao().insertAll(favorites)
+        }
+        payload.optJSONArray("hiddenChannels")?.let { rows ->
+            val hidden = (0 until rows.length()).map { i ->
+                val row = rows.getJSONObject(i)
+                HiddenChannel(row.getLong("streamId"), row.getString("name"))
+            }
+            db.hiddenChannelDao().clearAll()
+            if (hidden.isNotEmpty()) db.hiddenChannelDao().hideChannels(hidden)
+        }
+        }
+        payload.optJSONObject("maintenance")?.let { value ->
+            require(value.get("enabled") is Boolean && value.optString("message").length<=1000 && value.optString("support").length<=100)
+            context.getSharedPreferences("iptv_prefs",Context.MODE_PRIVATE).edit()
+                .putString("dashboard_maintenance_message",value.optString("message"))
+                .putString("dashboard_maintenance_support",value.optString("support"))
+                .putBoolean("dashboard_maintenance",value.getBoolean("enabled")).commit()
+        }
+        payload.optJSONObject("settings")?.let { RemoteManagementSettings.apply(context,it) }
+        payload.optJSONArray("customGroups")?.let { RemoteGroups.save(context,"customGroups",it) }
+        payload.optJSONArray("pinnedGroups")?.let { RemoteGroups.save(context,"pinnedGroups",it) }
+        payload.optJSONObject("playlists")?.let { operation ->
+            val id = operation.optString("id")
+            val existing = PlaylistProfilesManager.loadProfiles(context).firstOrNull { it.id == id }
+            when (operation.getString("action")) {
+                "activate" -> {
+                    require(existing != null) { "Playlist no longer exists" }
+                    PlaylistProfilesManager.setActiveProfile(context,id)
+                }
+                "save" -> {
+                    val name = operation.getString("name").trim()
+                    val url = operation.getString("url").trim()
+                    require(name.isNotEmpty() && name.length <= 120) { "Enter a playlist name" }
+                    require(URL(url).protocol in listOf("https","http")) { "Enter an HTTP or HTTPS playlist URL" }
+                    val username = operation.optString("username")
+                    val password = operation.optString("password")
+                    val profile = existing?.copy(name=name,serverUrl=url,username=username,password=password.ifEmpty { existing.password })
+                        ?: PlaylistProfilesManager.createProfile(name,url,username,password)
+                    PlaylistProfilesManager.upsertProfileAndActivate(context,profile)
+                }
+                else -> error("Unsupported playlist action")
+            }
+            cachedManagementCatalog = null
+        }
         context.getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE).edit().putBoolean("groups_changed", true).apply()
     }
 
