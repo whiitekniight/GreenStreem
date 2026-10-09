@@ -1,6 +1,6 @@
 {
-  "versionCode": 94,
-  "versionName": "1.9.58",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/b8b968e6b312397034cf30aa270ede16b7d29294/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "Adds dashboard management for player settings, hidden channels, custom and pinned groups, playlist provisioning, reusable settings profiles, snapshots and maintenance mode."
+  "versionCode": 95,
+  "versionName": "1.9.59",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/8b0e0a9be2b9e4cbec7158c85741e5ed70ed1df2/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "Fixes channel numbers missing beside channel logos in the Live TV guide when Show channel numbers is enabled."
 }
