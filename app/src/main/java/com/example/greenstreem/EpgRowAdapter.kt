@@ -63,6 +63,7 @@ class EpgRowAdapter(
         val ivCatchupIndicator: ImageView = v.findViewById(R.id.ivCatchupIndicator)
         val ivVisibilityEye: ImageView = v.findViewById(R.id.ivVisibilityEye)
         val tvName: TextView = v.findViewById(R.id.tvChannelName)
+        val tvNumber: TextView = v.findViewById(R.id.tvEpgChannelNumber)
         val channelInfo: View = v.findViewById(R.id.channelInfoContainer)
         val hsv: HorizontalScrollView = v.findViewById(R.id.hsvRow)
         val container: LinearLayout = v.findViewById(R.id.programsContainer)
@@ -227,6 +228,10 @@ class EpgRowAdapter(
         if (!isEpgUpdateOnly) {
             holder.boundChannelId = channel.id
             holder.tvName.text = ChannelNameFormatter.format(holder.itemView.context, channel.name)
+            val prefs = holder.itemView.context.getSharedPreferences("iptv_prefs", android.content.Context.MODE_PRIVATE)
+            val showNumber = prefs.getBoolean("general_show_channel_numbers", true) && channel.number > 0
+            holder.tvNumber.text = if (showNumber) channel.number.toString() else ""
+            holder.tvNumber.visibility = if (showNumber) View.VISIBLE else View.GONE
             updatePlayingIndicator(holder, position)
             updateCatchupIndicator(holder, channel)
             updateVisibilityIndicator(holder, channel)
