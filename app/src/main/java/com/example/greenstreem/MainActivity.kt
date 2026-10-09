@@ -79,6 +79,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import java.net.URL
 
 @OptIn(UnstableApi::class)
@@ -3769,6 +3770,9 @@ class MainActivity : FragmentActivity() {
                 XtreamManager.password,
                 streamId
             )
+            // A stalled full-guide endpoint must not hold a queue slot for 30 seconds
+            // before the usually faster short-guide fallback gets a chance to run.
+            call.timeout().timeout(8, TimeUnit.SECONDS)
             pendingEpgCalls.add(call)
             call.enqueue(object : Callback<XtreamEpgResponse> {
                 override fun onResponse(call: Call<XtreamEpgResponse>, response: Response<XtreamEpgResponse>) {
@@ -3785,8 +3789,10 @@ class MainActivity : FragmentActivity() {
                     applyProviderEpgResult(channel, streamId, primary)
                 }
                 override fun onFailure(call: Call<XtreamEpgResponse>, t: Throwable) {
-                    pendingEpgCalls.remove(call)
-                    if (call.isCanceled) {
+                    val wasPending = pendingEpgCalls.remove(call)
+                    // OkHttp also marks deadline failures as canceled. Only a queue
+                    // reset (which removes pending calls) should suppress fallback.
+                    if (call.isCanceled && !wasPending) {
                         finishEpgFetch(streamId)
                         return
                     }
@@ -3811,6 +3817,7 @@ class MainActivity : FragmentActivity() {
             streamId,
             getEpgLimitFromDaysSetting()
         )
+        fallbackCall.timeout().timeout(12, TimeUnit.SECONDS)
         pendingEpgCalls.add(fallbackCall)
         fallbackCall.enqueue(object : Callback<XtreamEpgResponse> {
             override fun onResponse(
@@ -3827,8 +3834,8 @@ class MainActivity : FragmentActivity() {
             }
 
             override fun onFailure(call: Call<XtreamEpgResponse>, t: Throwable) {
-                pendingEpgCalls.remove(call)
-                if (call.isCanceled) {
+                val wasPending = pendingEpgCalls.remove(call)
+                if (call.isCanceled && !wasPending) {
                     finishEpgFetch(streamId)
                     return
                 }
