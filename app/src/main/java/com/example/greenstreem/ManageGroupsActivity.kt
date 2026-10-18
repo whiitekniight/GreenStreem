@@ -38,6 +38,15 @@ class ManageGroupsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnHideAll).setOnClickListener { bulkAction(false) }
         findViewById<Button>(R.id.btnUnhideAll).setOnClickListener { bulkAction(true) }
 
+        findViewById<SwitchCompat>(R.id.swAutoShowNewGroups).apply {
+            isChecked = NewGroupVisibility.autoShow(this@ManageGroupsActivity)
+            isEnabled = false
+            setOnCheckedChangeListener { _, enabled ->
+                NewGroupVisibility.setAutoShow(this@ManageGroupsActivity, enabled)
+                markGroupsChanged()
+            }
+        }
+
         fetchAndDisplayGroups()
     }
 
@@ -70,6 +79,8 @@ class ManageGroupsActivity : AppCompatActivity() {
 
     private fun refreshList() {
         lifecycleScope.launch {
+            NewGroupVisibility.recordGroups(this@ManageGroupsActivity, allCategories)
+            findViewById<SwitchCompat>(R.id.swAutoShowNewGroups).isEnabled = allCategories.isNotEmpty()
             val hiddenIds = db.groupDao().getAllHidden().first().map { it.groupId }.toSet()
             rvGroups.adapter = GroupToggleAdapter(
                 allCategories,

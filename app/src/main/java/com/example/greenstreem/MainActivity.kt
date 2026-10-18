@@ -2598,6 +2598,11 @@ class MainActivity : FragmentActivity() {
                 if (generation != categoryFetchGeneration) return@launch
                 if (requestedMode != currentMode) return@launch
                 val channels = loadM3uChannelsForMode(requestedMode)
+                if (requestedMode == ContentMode.LIVE_TV && ProEntitlement.isProUnlocked(this@MainActivity)) {
+                    NewGroupVisibility.recordGroups(this@MainActivity, channels
+                        .map { m3uDisplayGroup(it) }.distinct()
+                        .mapIndexed { index, group -> XtreamCategory(group, group, index) })
+                }
                 val hiddenIds = if (requestedMode == ContentMode.LIVE_TV && ProEntitlement.isProUnlocked(this@MainActivity)) {
                     db.groupDao().getAllHidden().first().map { it.groupId }.toSet()
                 } else {
@@ -2676,6 +2681,9 @@ class MainActivity : FragmentActivity() {
                         if (generation != categoryFetchGeneration) return@launch
                         if (requestedMode != currentMode) return@launch
                         val proUnlocked = ProEntitlement.isProUnlocked(this@MainActivity)
+                        if (requestedMode == ContentMode.LIVE_TV && proUnlocked) {
+                            NewGroupVisibility.recordGroups(this@MainActivity, rawCategories)
+                        }
                         val hiddenIds = if (requestedMode == ContentMode.LIVE_TV && proUnlocked) {
                             db.groupDao().getAllHidden().first().map { it.groupId }.toSet()
                         } else {
@@ -6684,7 +6692,7 @@ class MainActivity : FragmentActivity() {
                     true
                 }
                 "Manage groups" -> {
-                    startActivity(Intent(this, ManageGroupsActivity::class.java))
+                    launchInternalActivity(Intent(this, ManageGroupsActivity::class.java))
                     true
                 }
                 else -> false
