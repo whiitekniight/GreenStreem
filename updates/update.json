@@ -1,6 +1,6 @@
 {
-  "versionCode": 96,
-  "versionName": "1.9.60",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/0219e89f109144fea74ba5d84c3a6e5cf74e7dc8/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "Improves Live TV guide loading by switching stalled full-guide requests to the fallback sooner. Includes the EPG channel-number fix."
+  "versionCode": 97,
+  "versionName": "1.9.61",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/92b1383cd7afadf6daf389fd0a4f46caee232c8b/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "Adds Automatically show new groups in Manage Groups. Turn it off to keep future provider groups hidden until enabled manually, without changing existing choices. Also fixes opening Manage groups from the guide shortcut."
 }
