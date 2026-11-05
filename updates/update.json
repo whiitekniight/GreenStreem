@@ -1,6 +1,6 @@
 {
-  "versionCode": 97,
-  "versionName": "1.9.61",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/92b1383cd7afadf6daf389fd0a4f46caee232c8b/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "Adds Automatically show new groups in Manage Groups. Turn it off to keep future provider groups hidden until enabled manually, without changing existing choices. Also fixes opening Manage groups from the guide shortcut."
+  "versionCode": 98,
+  "versionName": "1.9.62",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/91cd13e91a74e7ec788da40c9d3a1e2b23e9c185/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "Removes Emby Connect, its purchase flow, server login, library, and navigation from GreenStreem."
 }
