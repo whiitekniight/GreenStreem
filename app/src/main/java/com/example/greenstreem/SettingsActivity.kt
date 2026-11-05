@@ -29,8 +29,6 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var tvDetailTitle: TextView
     private lateinit var tvDetailDesc: TextView
     private lateinit var ivDetailIcon: ImageView
-    private lateinit var embyPanel: ScrollView
-    private lateinit var embyContent: LinearLayout
     private lateinit var rvSubOptions: RecyclerView
     private val prefs by lazy { getSharedPreferences("iptv_prefs", MODE_PRIVATE) }
 
@@ -38,11 +36,6 @@ class SettingsActivity : AppCompatActivity() {
         buildList {
             add(SettingItem("Playlists", "Manage playlists and login sources.", android.R.drawable.ic_menu_slideshow))
             add(SettingItem("Restore Code", "Optional: enter the code given by your provider to back up or restore this app.", android.R.drawable.ic_menu_save))
-            add(SettingItem(
-                "Emby Connect",
-                if (EmbyConnectEntitlement.isUnlocked(this@SettingsActivity)) "Connect and manage your own Emby server." else "Optional $9.99 lifetime add-on for your own Emby server.",
-                android.R.drawable.ic_menu_share
-            ))
             add(SettingItem("TV Guide", proAwareDescription("EPG sources, update behavior, and display options.", "Pro: EPG sources, update behavior, and display options."), android.R.drawable.ic_menu_today))
             add(SettingItem("Playback", proAwareDescription("Player behavior, startup, and stream options.", "Pro: playback behavior, startup, and stream options."), android.R.drawable.ic_media_play))
             add(SettingItem("Downloads", proAwareDescription("Movie download location and network targets.", "Pro: movie downloads and network storage."), android.R.drawable.stat_sys_download_done))
@@ -76,8 +69,6 @@ class SettingsActivity : AppCompatActivity() {
         tvDetailTitle = findViewById(R.id.tvSettingDetailTitle)
         tvDetailDesc = findViewById(R.id.tvSettingDetailDesc)
         ivDetailIcon = findViewById(R.id.ivSettingIconLarge)
-        embyPanel = findViewById(R.id.embySettingsPanel)
-        embyContent = findViewById(R.id.embySettingsContent)
         rvSubOptions = findViewById(R.id.rvSubOptions)
 
         val rvOptions = findViewById<RecyclerView>(R.id.rvSettingsOptions)
@@ -101,9 +92,7 @@ class SettingsActivity : AppCompatActivity() {
             when (item.title) {
                 "Playlists" -> startActivity(Intent(this, PlaylistSettingsActivity::class.java))
                 "Restore Code" -> startActivity(Intent(this, BackupRestoreActivity::class.java))
-                "Emby Connect" -> {
-                    showEmbyPanel(requestActionFocus = true)
-                }
+
                 "TV Guide" -> openProFeature("TV Guide settings are available in GreenStreem Pro.") {
                     openAdvanced(AdvancedSettingsActivity.Section.EPG.id)
                 }
@@ -146,16 +135,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         
         updateDetailView(settingsList[0])
-        if (intent.getBooleanExtra(EXTRA_OPEN_EMBY, false)) {
-            val embyPosition = settingsList.indexOfFirst { it.title == "Emby Connect" }
-            if (embyPosition >= 0) {
-                rvOptions.scrollToPosition(embyPosition)
-                rvOptions.post {
-                    showEmbyPanel(requestActionFocus = false)
-                    rvOptions.findViewHolderForAdapterPosition(embyPosition)?.itemView?.requestFocus()
-                }
-            }
-        }
+
     }
 
     private fun shouldRequestSettingsPin(): Boolean {
@@ -194,11 +174,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun updateDetailView(item: SettingItem) {
-        if (item.title == "Emby Connect") {
-            showEmbyPanel(requestActionFocus = false)
-            return
-        }
-        embyPanel.visibility = View.GONE
+
         ivDetailIcon.visibility = View.VISIBLE
         tvDetailTitle.visibility = View.VISIBLE
         tvDetailDesc.visibility = View.VISIBLE
@@ -211,196 +187,6 @@ class SettingsActivity : AppCompatActivity() {
             android.content.res.ColorStateList.valueOf(AppearanceTheme.accentColor(this))
         )
     }
-
-    private fun showEmbyPanel(requestActionFocus: Boolean) {
-        ivDetailIcon.visibility = View.GONE
-        tvDetailTitle.visibility = View.GONE
-        tvDetailDesc.visibility = View.GONE
-        rvSubOptions.visibility = View.GONE
-        embyPanel.visibility = View.VISIBLE
-        embyContent.removeAllViews()
-        if (EmbyConnectEntitlement.isUnlocked(this)) {
-            renderUnlockedEmby()
-        } else {
-            renderLockedEmby()
-        }
-        setEmbyBusy(false)
-        if (requestActionFocus) {
-            embyPanel.post {
-                findFirstFocusable(embyContent)?.requestFocus()
-            }
-        }
-    }
-
-    private fun renderLockedEmby() {
-        addEmbyTitle("Unlock Emby Connect — $9.99 Lifetime")
-        addEmbyBody(
-            "Use your own Emby server for Live TV, antenna channels, guide data, movies, and series inside GreenStreem. " +
-                "Your Emby server must already provide the channels, media, and remote access. One-time purchase; no subscription."
-        )
-        addEmbyLabel("Your activation ID")
-        addEmbyCode(EmbyConnectEntitlement.activationId(this))
-        addEmbyBody("Purchase through GreenStreem Discord. Press below to send your activation ID to the private order channel; GreenStreem will stay open.")
-        addEmbyButton("Send Purchase Request — $9.99") {
-            lifecycleScope.launch {
-                EmbyConnectActivationClient.submitPurchaseRequest(this@SettingsActivity)
-                    .onSuccess {
-                        Toast.makeText(this@SettingsActivity, "Request sent to GreenStreem Discord", Toast.LENGTH_LONG).show()
-                    }
-                    .onFailure {
-                        Toast.makeText(this@SettingsActivity, "Could not send request. Please try again.", Toast.LENGTH_LONG).show()
-                    }
-            }
-        }
-        addEmbyButton("I Paid — Check Activation") { checkEmbyActivation() }
-    }
-
-    private fun renderUnlockedEmby() {
-        addEmbyTitle("Emby Connect")
-        val saved = EmbySecureStore.load(this)
-        if (saved != null) {
-            addEmbyBody("Connected to ${saved.serverUrl}\nSigned in as ${saved.userName}")
-            addEmbyButton("Open Emby Library") {
-                startActivity(Intent(this, EmbyLibraryActivity::class.java))
-            }
-            addEmbyButton("Disconnect Emby Server") {
-                EmbySecureStore.clear(this)
-                showEmbyPanel(requestActionFocus = true)
-            }
-            return
-        }
-
-        addEmbyBody("Sign in to your own Emby server. Use the same server address, username, and password you use in the Emby app.")
-        val server = addEmbyInput("Emby server address", "https://your-server:8920", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        val username = addEmbyInput("Emby username", "Username", InputType.TYPE_CLASS_TEXT)
-        val password = addEmbyInput("Emby password", "Password", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
-        addEmbyButton("Connect Emby Server") {
-            lifecycleScope.launch {
-                setEmbyBusy(true)
-                EmbyApiClient.authenticate(server.text.toString(), username.text.toString(), password.text.toString())
-                    .onSuccess { result ->
-                        EmbySecureStore.save(
-                            this@SettingsActivity,
-                            EmbySecureStore.Credentials(result.serverUrl, result.userId, result.userName, result.accessToken)
-                        )
-                        password.text?.clear()
-                        Toast.makeText(this@SettingsActivity, "Emby connected", Toast.LENGTH_SHORT).show()
-                        showEmbyPanel(requestActionFocus = true)
-                    }
-                    .onFailure { error ->
-                        Toast.makeText(this@SettingsActivity, error.message ?: "Could not connect to Emby", Toast.LENGTH_LONG).show()
-                        setEmbyBusy(false)
-                    }
-            }
-        }
-    }
-
-    private fun checkEmbyActivation() {
-        lifecycleScope.launch {
-            setEmbyBusy(true)
-            EmbyConnectActivationClient.refreshStatus(this@SettingsActivity)
-                .onSuccess { unlocked ->
-                    if (unlocked) {
-                        Toast.makeText(this@SettingsActivity, "Emby Connect unlocked", Toast.LENGTH_LONG).show()
-                        showEmbyPanel(requestActionFocus = true)
-                    } else {
-                        Toast.makeText(this@SettingsActivity, "Payment has not been approved yet", Toast.LENGTH_LONG).show()
-                        setEmbyBusy(false)
-                    }
-                }
-                .onFailure {
-                    Toast.makeText(this@SettingsActivity, "Activation service is not ready yet. Your ID is saved.", Toast.LENGTH_LONG).show()
-                    setEmbyBusy(false)
-                }
-        }
-    }
-
-    private fun addEmbyTitle(text: String) {
-        embyContent.addView(TextView(this).apply {
-            this.text = text
-            textSize = 27f
-            setTextColor(Color.WHITE)
-            setPadding(0, 0, 0, dp(10))
-        })
-    }
-
-    private fun addEmbyBody(text: String) {
-        embyContent.addView(TextView(this).apply {
-            this.text = text
-            textSize = 16f
-            setTextColor(0xFFE7ECF4.toInt())
-            setLineSpacing(0f, 1.12f)
-            setPadding(0, 0, 0, dp(9))
-        })
-    }
-
-    private fun addEmbyLabel(text: String) {
-        embyContent.addView(TextView(this).apply {
-            this.text = text
-            textSize = 16f
-            setTextColor(0xFFB8C4D8.toInt())
-            setPadding(0, dp(4), 0, dp(4))
-        })
-    }
-
-    private fun addEmbyCode(text: String) {
-        embyContent.addView(TextView(this).apply {
-            this.text = text
-            textSize = 21f
-            setTextColor(AppearanceTheme.accentColor(this@SettingsActivity))
-            gravity = Gravity.CENTER
-            setPadding(dp(16), dp(9), dp(16), dp(9))
-            background = AppearanceTheme.buttonBackground(this@SettingsActivity)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-    }
-
-    private fun addEmbyInput(label: String, hint: String, type: Int): EditText {
-        addEmbyLabel(label)
-        return EditText(this).also { input ->
-            input.hint = hint
-            input.inputType = type
-            input.setTextColor(Color.WHITE)
-            input.setHintTextColor(0xFF8190A8.toInt())
-            input.setSingleLine(true)
-            input.setPadding(dp(16), dp(10), dp(16), dp(10))
-            input.background = AppearanceTheme.buttonBackground(this)
-            embyContent.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)).apply {
-                bottomMargin = dp(6)
-            })
-        }
-    }
-
-    private fun addEmbyButton(text: String, action: () -> Unit) {
-        embyContent.addView(Button(this).apply {
-            this.text = text
-            isFocusable = true
-            setTextColor(Color.WHITE)
-            textSize = 17f
-            background = AppearanceTheme.buttonBackground(this@SettingsActivity)
-            setOnClickListener { action() }
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply {
-            topMargin = dp(6)
-        })
-    }
-
-    private fun setEmbyBusy(busy: Boolean) {
-        fun visit(view: View) {
-            view.isEnabled = !busy
-            if (view is ViewGroup) for (index in 0 until view.childCount) visit(view.getChildAt(index))
-        }
-        visit(embyContent)
-    }
-
-    private fun findFirstFocusable(group: ViewGroup): View? {
-        for (index in 0 until group.childCount) {
-            val child = group.getChildAt(index)
-            if (child.isFocusable) return child
-            if (child is ViewGroup) findFirstFocusable(child)?.let { return it }
-        }
-        return null
-    }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onResume() {
         super.onResume()
@@ -467,7 +253,6 @@ class SettingsActivity : AppCompatActivity() {
 
     companion object {
         private const val KEY_PARENTAL_PIN_HASH = "parental_pin_hash"
-        const val EXTRA_OPEN_EMBY = "open_emby"
         private var settingsUnlocked = false
     }
 }

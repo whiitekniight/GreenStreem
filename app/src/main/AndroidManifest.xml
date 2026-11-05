@@ -56,17 +56,7 @@
             android:screenOrientation="landscape"
             android:theme="@style/Theme.GreenStreem.NoActionBar" />
 
-        <activity
-            android:name=".EmbyConnectActivity"
-            android:exported="false"
-            android:screenOrientation="landscape"
-            android:theme="@style/Theme.GreenStreem.NoActionBar" />
 
-        <activity
-            android:name=".EmbyLibraryActivity"
-            android:exported="false"
-            android:screenOrientation="landscape"
-            android:theme="@style/Theme.GreenStreem.NoActionBar" />
 
         <activity
             android:name=".PlaylistSettingsActivity"

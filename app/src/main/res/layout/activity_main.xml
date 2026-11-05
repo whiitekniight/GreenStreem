@@ -76,16 +76,8 @@
                 android:textColor="@color/tivimate_text_primary" android:textSize="16sp"
                 android:gravity="center" android:padding="12dp"
                 android:focusable="true" android:background="@drawable/selector_button_bg"
-                android:nextFocusDown="@+id/navEmby" />
-
-            <TextView android:id="@+id/navEmby"
-                android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp" android:text="Emby"
-                android:textColor="@color/tivimate_text_primary" android:textSize="16sp"
-                android:gravity="center" android:padding="12dp"
-                android:focusable="true" android:background="@drawable/selector_button_bg"
-                android:nextFocusUp="@+id/navSeries"
                 android:nextFocusDown="@+id/navSettings" />
+
 
             <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:focusable="false" />
 
@@ -95,7 +87,7 @@
                 android:textColor="@color/tivimate_text_primary" android:textSize="16sp"
                 android:gravity="center" android:padding="12dp"
                 android:focusable="true" android:background="@drawable/selector_button_bg"
-                android:nextFocusUp="@+id/navEmby"
+                android:nextFocusUp="@+id/navSeries"
                 android:nextFocusDown="@+id/navExit" />
 
             <TextView android:id="@+id/navExit"

@@ -98,7 +98,6 @@ class MainActivity : FragmentActivity() {
 
     private var player: ExoPlayer? = null
     private var httpDataSourceFactory: DefaultHttpDataSource.Factory? = null
-    private var returnToEmbyOnBack = false
     private lateinit var playerView: PlayerView
     private lateinit var previewPlayerView: PlayerView
     private lateinit var playerContainer: FrameLayout
@@ -673,23 +672,7 @@ class MainActivity : FragmentActivity() {
         PlayBillingManager.refreshPurchases()
         applyAppearanceTheme()
         val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
-        val returnToLiveGuideAfterEmby = prefs.getBoolean("return_to_live_guide_after_emby", false)
-        if (returnToLiveGuideAfterEmby) {
-            prefs.edit().remove("return_to_live_guide_after_emby").apply()
-            returnToEmbyOnBack = false
-            currentMode = ContentMode.LIVE_TV
-            saveCurrentMode(ContentMode.LIVE_TV)
-            val lastChannelId = currentChannel?.id
-                ?: prefs.getLong("last_channel_id", -1L).takeIf { it > 0L }
-            if (currentChannel == null && lastChannelId != null) {
-                resumeLastChannel(lastChannelId)
-            } else {
-                player?.play()
-            }
-            window.decorView.postDelayed({
-                if (!isFinishing && !isDestroyed) enterLiveGuideAtCurrentChannel()
-            }, if (currentChannel == null) 900L else 250L)
-        }
+
         val groupsChanged = prefs.getBoolean(KEY_GROUPS_CHANGED, false)
         if (groupsChanged) {
             prefs.edit().putBoolean(KEY_GROUPS_CHANGED, false).apply()
@@ -724,7 +707,6 @@ class MainActivity : FragmentActivity() {
         val channel = intent?.getSerializableExtra("play_channel") as? Channel ?: return false
         intent.removeExtra("play_channel")
         if (currentMode != ContentMode.LIVE_TV) switchMode(ContentMode.LIVE_TV)
-        returnToEmbyOnBack = false
         // Search returns to the existing activity. Start the selected stream even
         // when it is the same channel that Search paused, then show playback.
         playChannel(channel, openInGuide = false)
@@ -829,7 +811,6 @@ class MainActivity : FragmentActivity() {
             R.id.navTv,
             R.id.navMovies,
             R.id.navSeries,
-            R.id.navEmby,
             R.id.navSettings,
             R.id.navExit
         ).forEach { id ->
@@ -2093,7 +2074,6 @@ class MainActivity : FragmentActivity() {
         }
         findViewById<View>(R.id.navMovies)?.setOnClickListener { switchMode(ContentMode.MOVIES) }
         findViewById<View>(R.id.navSeries)?.setOnClickListener { switchMode(ContentMode.SERIES) }
-        findViewById<View>(R.id.navEmby)?.setOnClickListener { openEmbyFromMainRail() }
         findViewById<View>(R.id.navSettings)?.setOnClickListener { launchInternalActivity(Intent(this, SettingsActivity::class.java)) }
         findViewById<View>(R.id.navExit)?.setOnClickListener { finishAffinity() }
     }
@@ -2105,18 +2085,6 @@ class MainActivity : FragmentActivity() {
         startActivity(intent)
     }
 
-    private fun openEmbyFromMainRail() {
-        val unlocked = EmbyConnectEntitlement.isUnlocked(this)
-        val connected = EmbySecureStore.load(this) != null
-        if (unlocked && connected) {
-            launchInternalActivity(Intent(this, EmbyLibraryActivity::class.java))
-        } else {
-            launchInternalActivity(
-                Intent(this, SettingsActivity::class.java)
-                    .putExtra(SettingsActivity.EXTRA_OPEN_EMBY, true)
-            )
-        }
-    }
 
     private fun launchSearchActivity() {
         player?.pause()
@@ -5320,9 +5288,7 @@ class MainActivity : FragmentActivity() {
         tvProgramTitleLarge.text = title
         try {
             val requestHeaders = IPTV_PLAYER_HEADERS.toMutableMap()
-            if (resumeKey.startsWith("emby_")) {
-                EmbySecureStore.load(this)?.let { requestHeaders.putAll(EmbyApiClient.playbackHeaders(it)) }
-            }
+
             httpDataSourceFactory?.setDefaultRequestProperties(requestHeaders)
             resetAudioSelectionForNewMedia()
             player?.setMediaItem(MediaItem.fromUri(url))
@@ -5401,27 +5367,12 @@ class MainActivity : FragmentActivity() {
     private fun resumeLastPlayback(): Boolean {
         val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
         return when (prefs.getString(KEY_LAST_PLAYBACK_TYPE, LAST_PLAYBACK_LIVE)) {
-            LAST_PLAYBACK_EMBY_LIVE -> {
-                val url = prefs.getString(KEY_LAST_PLAYBACK_URL, "").orEmpty()
-                val title = prefs.getString(KEY_LAST_PLAYBACK_TITLE, "Emby Live TV")
-                    .orEmpty().ifBlank { "Emby Live TV" }
-                val credentials = EmbySecureStore.load(this) ?: return false
-                if (url.isBlank()) return false
-                httpDataSourceFactory?.setDefaultRequestProperties(
-                    IPTV_PLAYER_HEADERS.toMutableMap().apply {
-                        putAll(EmbyApiClient.playbackHeaders(credentials))
-                    }
-                )
-                returnToEmbyOnBack = true
-                currentMode = ContentMode.LIVE_TV
-                playLiveMedia(listOf(url), title, UiState.FULL_SCREEN)
-                true
-            }
+
             LAST_PLAYBACK_MOVIE, LAST_PLAYBACK_SERIES -> {
                 val url = prefs.getString(KEY_LAST_PLAYBACK_URL, "").orEmpty()
                 val title = prefs.getString(KEY_LAST_PLAYBACK_TITLE, "Playback").orEmpty().ifBlank { "Playback" }
                 val resumeKey = prefs.getString(KEY_LAST_PLAYBACK_RESUME_KEY, "").orEmpty()
-                if (url.isBlank() || resumeKey.isBlank()) return false
+                if (url.isBlank() || resumeKey.isBlank() || resumeKey.startsWith("emby_")) return false
                 currentMode = if (prefs.getString(KEY_LAST_PLAYBACK_TYPE, "") == LAST_PLAYBACK_SERIES) {
                     ContentMode.SERIES
                 } else {
@@ -5487,19 +5438,9 @@ class MainActivity : FragmentActivity() {
     private fun handleExternalPlaybackIntent(intent: Intent?): Boolean {
         val playUrl = intent?.getStringExtra("play_url")?.trim().orEmpty()
         if (playUrl.isBlank()) return false
-        returnToEmbyOnBack = intent?.getBooleanExtra("return_to_emby", false) == true
         val title = intent?.getStringExtra("media_title")?.takeIf { it.isNotBlank() } ?: "Playback"
         if (intent?.getBooleanExtra("play_live", false) == true) {
-            if (returnToEmbyOnBack) {
-                EmbySecureStore.load(this)?.let { credentials ->
-                    httpDataSourceFactory?.setDefaultRequestProperties(
-                        IPTV_PLAYER_HEADERS.toMutableMap().apply {
-                            putAll(EmbyApiClient.playbackHeaders(credentials))
-                        }
-                    )
-                }
-                saveLastPlayback(LAST_PLAYBACK_EMBY_LIVE, title, playUrl, null, -1L)
-            }
+
             playLiveMedia(listOf(playUrl), title, UiState.FULL_SCREEN)
             return true
         }
@@ -6043,20 +5984,6 @@ class MainActivity : FragmentActivity() {
             return true
         }
 
-        if ((returnToEmbyOnBack || currentVodResumeKey?.startsWith("emby_") == true) &&
-            currentState == UiState.FULL_SCREEN
-        ) {
-            saveVodResumeProgress()
-            player?.pause()
-            // After a cold start MainActivity is the task root, so there may be
-            // no Emby library activity underneath playback. Bring an existing
-            // library screen forward or create it above the player.
-            launchInternalActivity(
-                Intent(this, EmbyLibraryActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            )
-            return true
-        }
 
         if (currentMode != ContentMode.LIVE_TV && currentState == UiState.FULL_SCREEN) {
             saveVodResumeProgress()
@@ -8004,7 +7931,6 @@ class MainActivity : FragmentActivity() {
         private const val KEY_LAST_PLAYBACK_LIVE_CATEGORY_ID = "last_playback_live_category_id"
         private const val VOD_WATCHED_REMAINING_MS = 600_000L
         private const val LAST_PLAYBACK_LIVE = "live"
-        private const val LAST_PLAYBACK_EMBY_LIVE = "emby_live"
         private const val LAST_PLAYBACK_MOVIE = "movie"
         private const val LAST_PLAYBACK_SERIES = "series"
         private const val KEY_VOD_WATCHED_PREFIX = "vod_watched_"
