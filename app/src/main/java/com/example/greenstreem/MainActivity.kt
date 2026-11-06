@@ -17,6 +17,8 @@ import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -1738,7 +1740,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun setupPhoneMovieTouchControls() {
-        if (isTvUiMode()) return
+        if (!isTouchscreenPhone()) return
         playerView.isClickable = true
         playerView.setOnClickListener {
             handlePhoneMovieTap()
@@ -1750,7 +1752,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handlePhoneMovieTap(): Boolean {
-        if (isTvUiMode()) return false
+        if (!isTouchscreenPhone()) return false
         if (currentState != UiState.FULL_SCREEN ||
             (currentMode == ContentMode.LIVE_TV && currentVodResumeKey == null)
         ) {
@@ -1762,6 +1764,39 @@ class MainActivity : FragmentActivity() {
             showMovieControls(focusControls = false, showExtras = false)
         }
         return true
+    }
+
+    private fun isTouchscreenPhone(): Boolean =
+        packageManager.hasSystemFeature("android.hardware.touchscreen") &&
+            !packageManager.hasSystemFeature("android.software.leanback")
+
+    private var phoneTouchDownX = 0f
+    private var phoneTouchDownY = 0f
+    private var phoneTouchIsTap = false
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (isTouchscreenPhone()) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    phoneTouchDownX = event.x
+                    phoneTouchDownY = event.y
+                    phoneTouchIsTap = true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val slop = ViewConfiguration.get(this).scaledTouchSlop
+                    if (kotlin.math.abs(event.x - phoneTouchDownX) > slop ||
+                        kotlin.math.abs(event.y - phoneTouchDownY) > slop
+                    ) phoneTouchIsTap = false
+                }
+                MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> phoneTouchIsTap = false
+                MotionEvent.ACTION_UP -> {
+                    if (phoneTouchIsTap) window.showMobileSystemBarsTemporarily()
+                    phoneTouchIsTap = false
+                }
+            }
+        }
+        // Observe taps without consuming guide scrolling or button clicks.
+        return super.dispatchTouchEvent(event)
     }
 
     private fun setupNextEpisodePrompt() {
@@ -2424,6 +2459,9 @@ class MainActivity : FragmentActivity() {
             } else {
                 (resources.displayMetrics.heightPixels * 0.43f).toInt().coerceIn(dp(360), dp(480))
             }
+        } else if (isTouchscreenPhone()) {
+            // End the header at the preview's bottom, including its top inset.
+            topInfo.paddingTop + videoPreviewBox.layoutParams.height
         } else if (currentState == UiState.EPG_GRID || currentState == UiState.CATEGORIES) {
             if (currentState == UiState.EPG_GRID) {
                 if (isTvUiMode()) dp(200) else dp(170)
@@ -2434,6 +2472,12 @@ class MainActivity : FragmentActivity() {
             topInfoDefaultHeightPx.takeIf { it > 0 } ?: dp(160)
         }
         applyInfoPanelConstraints(libraryMode)
+        if (isTouchscreenPhone()) {
+            topInfo.setPadding(topInfo.paddingLeft, topInfo.paddingTop,
+                topInfo.paddingRight, if (libraryMode) dp(10) else 0)
+            rvContent.setPadding(rvContent.paddingLeft, if (libraryMode) dp(12) else 0,
+                rvContent.paddingRight, if (libraryMode) dp(14) else 0)
+        }
         videoPreviewBox.visibility = if (libraryMode) View.GONE else View.VISIBLE
         previewPlayerView.visibility = if (libraryMode) View.GONE else View.VISIBLE
         ivVodPoster.visibility = View.GONE

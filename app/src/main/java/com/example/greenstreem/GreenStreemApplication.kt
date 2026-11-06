@@ -83,6 +83,12 @@ private fun Window.showTouchableSystemBars() {
     WindowInsetsControllerCompat(this, decorView).show(WindowInsetsCompat.Type.systemBars())
 }
 
+internal fun Window.showMobileSystemBarsTemporarily() {
+    showTouchableSystemBars()
+    fullscreenHandler.removeCallbacksAndMessages(null)
+    fullscreenHandler.postDelayed({ applyHiddenSystemBars() }, MOBILE_SYSTEM_BARS_VISIBLE_MS)
+}
+
 private fun Window.applyHiddenSystemBars() {
     decorView.systemUiVisibility = (
         View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY

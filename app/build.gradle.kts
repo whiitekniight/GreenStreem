@@ -41,8 +41,8 @@ android {
         applicationId = "com.example.greenstreem"
         minSdk = 23
         targetSdk = 36
-        versionCode = 98
-        versionName = "1.9.62"
+        versionCode = 100
+        versionName = "1.9.64"
     }
 
     flavorDimensions += "distribution"
@@ -166,3 +166,4 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 }
+
