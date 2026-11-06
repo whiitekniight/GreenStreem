@@ -1,6 +1,6 @@
 {
-  "versionCode": 98,
-  "versionName": "1.9.62",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/91cd13e91a74e7ec788da40c9d3a1e2b23e9c185/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "Removes Emby Connect, its purchase flow, server login, library, and navigation from GreenStreem."
+  "versionCode": 100,
+  "versionName": "1.9.64",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/bf9364037354c4d472e27fb12608983714a24115/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "More guide rows on phones without shrinking text or video. Tap the screen to restore Back, Home, and Recent buttons."
 }
