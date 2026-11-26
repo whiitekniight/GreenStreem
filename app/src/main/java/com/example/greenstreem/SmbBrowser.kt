@@ -9,6 +9,7 @@ import java.io.OutputStream
 import java.util.Properties
 
 object SmbBrowser {
+    init { jcifs.util.Crypto.initProvider(SmbDigestProvider()) }
     data class Entry(val name: String, val isDirectory: Boolean)
 
     fun listFolders(server: String, username: String, password: String, share: String?, folder: String): List<Entry> {
@@ -43,8 +44,23 @@ object SmbBrowser {
         return target.outputStream
     }
 
+    fun openRecordingOutput(server: String, username: String, password: String, share: String, folder: String, fileName: String): OutputStream {
+        val ctx = context(username, password)
+        val directory = SmbFile(directoryUrl(server, share, folder), ctx)
+        require(directory.exists() && directory.isDirectory) { "Selected recording folder does not exist" }
+        val target = SmbFile(fileUrl(server, share, folder, fileName), ctx)
+        require(!target.exists()) { "Recording file already exists" }
+        return target.outputStream
+    }
+
     fun targetUrl(server: String, share: String, folder: String): String {
         return directoryUrl(server, share, folder).trimEnd('/')
+    }
+
+    fun openRandomAccess(c: android.content.Context, job: RecordingSchedule.Job): jcifs.smb.SmbRandomAccessFile {
+        val p = c.getSharedPreferences(DownloadPrefs.PREFS_NAME, 0)
+        return jcifs.smb.SmbRandomAccessFile(SmbFile(fileUrl(job.server, job.share, job.folder, job.file),
+            context(p.getString(DownloadPrefs.KEY_SMB_USERNAME, "").orEmpty(), p.getString(DownloadPrefs.KEY_SMB_PASSWORD, "").orEmpty())), "r")
     }
 
     private fun context(username: String, password: String): CIFSContext {

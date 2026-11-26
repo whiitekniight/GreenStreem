@@ -582,8 +582,8 @@ class MainActivity : FragmentActivity() {
                     updateFocusInfo(channel, listing)
                 }
             },
-            onProgramLongClick = { channel ->
-                if (!isChannelVisibilityEditMode) showChannelOptions(channel)
+            onProgramLongClick = { channel, listing ->
+                if (!isChannelVisibilityEditMode) showRecordingOptions(channel, listing)
             },
             onVisibilityToggleClick = { channel ->
                 if (isChannelVisibilityEditMode) toggleChannelVisibilitySelection(channel)
@@ -813,6 +813,7 @@ class MainActivity : FragmentActivity() {
             R.id.navTv,
             R.id.navMovies,
             R.id.navSeries,
+            R.id.navRecordings,
             R.id.navSettings,
             R.id.navExit
         ).forEach { id ->
@@ -834,6 +835,40 @@ class MainActivity : FragmentActivity() {
         if (::epgAdapter.isInitialized) {
             epgAdapter.notifyDataSetChanged()
         }
+    }
+
+    private fun showRecordingOptions(channel: Channel, listing: XtreamEpgListing?) {
+        if(!ProEntitlement.isProUnlocked(this)) { showChannelOptions(channel); return }
+        AlertDialog.Builder(this).setTitle(listing?.let { DataUtils.decodeBase64(it.title) } ?: channel.name)
+            .setItems(arrayOf("Schedule recording", "Recordings", "Channel options")) { _, index ->
+                when(index) {
+                    1 -> launchInternalActivity(Intent(this, RecordingsActivity::class.java))
+                    2 -> showChannelOptions(channel)
+                    else -> {
+                        if(listing == null) { Toast.makeText(this, "Hold OK on a program with guide times", Toast.LENGTH_LONG).show(); return@setItems }
+                        if(!RecordingSchedule.alarmAllowed(this)) {
+                            launchInternalActivity(Intent(this, RecordingsActivity::class.java)); return@setItems
+                        }
+                        val title = DataUtils.decodeBase64(listing.title)
+                        AlertDialog.Builder(this).setTitle("Record $title?")
+                            .setMessage("Saves to the recording folder selected in Recordings (network, local, or USB). Keep this device powered and connected. Watching another channel may require another provider connection. Android 15+ limits background recording to six hours per day. Force-stop prevents recording until you reopen GreenStreem.")
+                            .setPositiveButton("Schedule") { _, _ ->
+                                runCatching {
+                                    val url = if(isM3uPlaylist()) channel.streamUrl else buildLiveStreamUrl(channel.id, LIVE_STREAM_FORMAT_TS)
+                                    RecordingSchedule.add(this,title,channel.name,url,listing.startTimestamp*1000,listing.stopTimestamp*1000)
+                                }.onSuccess { Toast.makeText(this,"Recording scheduled",Toast.LENGTH_LONG).show() }
+                                    .onFailure { Toast.makeText(this,it.message ?: "Could not schedule",Toast.LENGTH_LONG).show() }
+                            }.setNeutralButton("30-second test") { _, _ ->
+                                runCatching {
+                                    val url = if(isM3uPlaylist()) channel.streamUrl else buildLiveStreamUrl(channel.id, LIVE_STREAM_FORMAT_TS)
+                                    val start = System.currentTimeMillis() + 10000L
+                                    RecordingSchedule.add(this,"Test - $title",channel.name,url,start,start+30000L)
+                                }.onSuccess { Toast.makeText(this,"Test starts in 10 seconds; you can leave the app",Toast.LENGTH_LONG).show() }
+                                    .onFailure { Toast.makeText(this,it.message ?: "Could not schedule test",Toast.LENGTH_LONG).show() }
+                            }.setNegativeButton("Cancel",null).show()
+                    }
+                }
+            }.show()
     }
 
     private fun showChannelOptions(channel: Channel) {
@@ -2109,6 +2144,7 @@ class MainActivity : FragmentActivity() {
         }
         findViewById<View>(R.id.navMovies)?.setOnClickListener { switchMode(ContentMode.MOVIES) }
         findViewById<View>(R.id.navSeries)?.setOnClickListener { switchMode(ContentMode.SERIES) }
+        findViewById<View>(R.id.navRecordings)?.setOnClickListener { launchInternalActivity(Intent(this, RecordingsActivity::class.java)) }
         findViewById<View>(R.id.navSettings)?.setOnClickListener { launchInternalActivity(Intent(this, SettingsActivity::class.java)) }
         findViewById<View>(R.id.navExit)?.setOnClickListener { finishAffinity() }
     }

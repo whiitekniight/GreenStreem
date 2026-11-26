@@ -37,7 +37,7 @@ object AppearanceTheme {
         val normal = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = context.dp(4).toFloat()
-            setColor(Color.parseColor("#1F262F"))
+            setColor(androidx.core.graphics.ColorUtils.blendARGB(accentColor(context), Color.BLACK, 0.45f))
         }
         return StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_focused), focused)

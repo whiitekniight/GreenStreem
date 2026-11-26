@@ -65,6 +65,13 @@ class DownloadSettingsActivity : AppCompatActivity() {
 
         root.addView(title)
         root.addView(subtitle)
+        root.addView(android.widget.Button(this).apply {
+            text = "Recordings / Choose recording storage"
+            setTextColor(Color.WHITE)
+            backgroundTintList = null
+            background = AppearanceTheme.buttonBackground(this@DownloadSettingsActivity)
+            setOnClickListener { startActivity(android.content.Intent(this@DownloadSettingsActivity, RecordingsActivity::class.java)) }
+        })
         root.addView(
             recycler,
             LinearLayout.LayoutParams(
@@ -243,11 +250,12 @@ class DownloadSettingsActivity : AppCompatActivity() {
             result.onSuccess { entries ->
                 showSmbFolderChooser(server, username, password, share, folder, entries)
             }.onFailure { error ->
-                Toast.makeText(
-                    this@DownloadSettingsActivity,
-                    "SMB browse failed: ${error.message ?: error.javaClass.simpleName}",
-                    Toast.LENGTH_LONG
-                ).show()
+                AlertDialog.Builder(this@DownloadSettingsActivity)
+                    .setTitle("Could not browse shares")
+                    .setMessage("${error.message ?: error.javaClass.simpleName}\nYou can enter a known shared-folder path directly.")
+                    .setPositiveButton("Enter path") { _, _ -> showManualSmbPathDialog(server, username, password) }
+                    .setNeutralButton("Change login") { _, _ -> showSmbDialog() }
+                    .setNegativeButton("Cancel", null).show()
             }
         }
     }

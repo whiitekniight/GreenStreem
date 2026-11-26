@@ -31,6 +31,7 @@ class GreenStreemApplication : Application() {
         BrandedServerMigration.apply(this)
         getSharedPreferences("iptv_prefs",Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(maintenanceListener)
         CloudBackupScheduler.scheduleAsync(this)
+        RecordingSchedule.restore(this)
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 activity.applyGreenStreemFullscreenSafely()

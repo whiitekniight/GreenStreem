@@ -22,7 +22,7 @@ class EpgRowAdapter(
     private val sync: ScrollSync,
     private val onProgramFocus: (Channel, XtreamEpgListing?) -> Unit,
     private val onProgramClick: (Channel, XtreamEpgListing?) -> Unit,
-    private val onProgramLongClick: (Channel) -> Unit,
+    private val onProgramLongClick: (Channel, XtreamEpgListing?) -> Unit,
     private val onVisibilityToggleClick: (Channel) -> Unit
 ) : RecyclerView.Adapter<EpgRowAdapter.VH>() {
 
@@ -249,7 +249,7 @@ class EpgRowAdapter(
                 sync.notifyRowScrolled(holder.hsv, scrollX)
             }
             val showOptions = View.OnLongClickListener {
-                if (!visibilityEditMode) onProgramLongClick(channel)
+                if (!visibilityEditMode) onProgramLongClick(channel, null)
                 true
             }
             holder.itemView.setOnLongClickListener(showOptions)
@@ -494,7 +494,7 @@ class EpgRowAdapter(
         
         // ADDED: Handle Long Click for Favorites
         view.setOnLongClickListener {
-            if (!visibilityEditMode) onProgramLongClick(channel)
+            if (!visibilityEditMode) onProgramLongClick(channel, listing)
             true 
         }
 

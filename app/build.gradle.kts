@@ -41,8 +41,9 @@ android {
         applicationId = "com.example.greenstreem"
         minSdk = 23
         targetSdk = 36
-        versionCode = 100
-        versionName = "1.9.64"
+        testInstrumentationRunner = "com.example.greenstreem.RecordingLifecycleTest"
+        versionCode = 101
+        versionName = "1.9.65"
     }
 
     flavorDimensions += "distribution"
@@ -90,7 +91,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             if (hasPlaySigningConfig) {
                 signingConfig = signingConfigs.getByName("playUpload")
             }
