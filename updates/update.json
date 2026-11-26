@@ -1,6 +1,6 @@
 {
-  "versionCode": 102,
-  "versionName": "1.9.66",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/77b51573c5806a469421e07d53d9aa1323bda6df/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "Clearer phone permission setup for scheduled recordings. Tap a recording for Play or Delete; long-press to select multiple recordings and delete them together. Record and replay from your chosen NAS/shared folder, local storage, or USB drive. Keep the device powered on and connected for scheduled recordings."
+  "versionCode": 103,
+  "versionName": "1.9.67",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/a6b6f7d07dcbf6b992d3e06e80b7e07b45dffa6f/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "New Shared recordings button: browse videos in your chosen NAS/local/USB folder, including recordings from other devices. Share a USB recording folder over your home network; other GreenStreem devices can find it automatically and pair once with a six-digit code. Saved connections, playback seeking, colored buttons, and address fallback included. Keep the USB-sharing device powered on and storage connected while others watch. Shared browsing is read-only; existing recording delete controls remain available."
 }
