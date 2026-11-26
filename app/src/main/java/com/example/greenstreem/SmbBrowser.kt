@@ -57,6 +57,17 @@ object SmbBrowser {
         return directoryUrl(server, share, folder).trimEnd('/')
     }
 
+    fun deleteRecording(c: android.content.Context, job: RecordingSchedule.Job) {
+        require(job.file.isNotBlank() && '/' !in job.file && '\\' !in job.file) { "Invalid recording filename" }
+        val p=c.getSharedPreferences(DownloadPrefs.PREFS_NAME,0)
+        val target=SmbFile(fileUrl(job.server,job.share,job.folder,job.file),
+            context(p.getString(DownloadPrefs.KEY_SMB_USERNAME,"").orEmpty(),p.getString(DownloadPrefs.KEY_SMB_PASSWORD,"").orEmpty()))
+        if(target.exists()) {
+            require(!target.isDirectory) { "A folder cannot be deleted as a recording" }
+            target.delete()
+        }
+    }
+
     fun openRandomAccess(c: android.content.Context, job: RecordingSchedule.Job): jcifs.smb.SmbRandomAccessFile {
         val p = c.getSharedPreferences(DownloadPrefs.PREFS_NAME, 0)
         return jcifs.smb.SmbRandomAccessFile(SmbFile(fileUrl(job.server, job.share, job.folder, job.file),

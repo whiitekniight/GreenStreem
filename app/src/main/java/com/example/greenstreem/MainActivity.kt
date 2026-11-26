@@ -837,6 +837,18 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private var pendingRecordingPermission: Pair<Channel, XtreamEpgListing?>? = null
+    private val recordingPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) {
+        val selection = pendingRecordingPermission
+        pendingRecordingPermission = null
+        if (selection != null) {
+            if (RecordingSchedule.alarmAllowed(this)) showRecordingOptions(selection.first, selection.second)
+            else Toast.makeText(this, "Scheduling is still disabled. Enable Alarms & reminders to record at a set time.", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun showRecordingOptions(channel: Channel, listing: XtreamEpgListing?) {
         if(!ProEntitlement.isProUnlocked(this)) { showChannelOptions(channel); return }
         AlertDialog.Builder(this).setTitle(listing?.let { DataUtils.decodeBase64(it.title) } ?: channel.name)
@@ -847,7 +859,23 @@ class MainActivity : FragmentActivity() {
                     else -> {
                         if(listing == null) { Toast.makeText(this, "Hold OK on a program with guide times", Toast.LENGTH_LONG).show(); return@setItems }
                         if(!RecordingSchedule.alarmAllowed(this)) {
-                            launchInternalActivity(Intent(this, RecordingsActivity::class.java)); return@setItems
+                            AlertDialog.Builder(this)
+                                .setTitle("Allow scheduled recordings")
+                                .setMessage("Android needs Alarms & reminders access so GreenStreem can start your recording on time. Enable it on the next screen, then return here to schedule this program. Your chosen storage folder is already saved.")
+                                .setPositiveButton("Enable scheduling") { _, _ ->
+                                    pendingRecordingPermission = channel to listing
+                                    suppressExitOnUserLeaveHint = true
+                                    muteForInternalActivity()
+                                    postInternalActivityMutePasses()
+                                    runCatching {
+                                        recordingPermissionLauncher.launch(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+                                    }.onFailure {
+                                        pendingRecordingPermission = null
+                                        suppressExitOnUserLeaveHint = false
+                                        Toast.makeText(this,"Enable GreenStreem in Android Settings: Special app access, Alarms & reminders",Toast.LENGTH_LONG).show()
+                                    }
+                                }.setNegativeButton("Not now",null).show()
+                            return@setItems
                         }
                         val title = DataUtils.decodeBase64(listing.title)
                         AlertDialog.Builder(this).setTitle("Record $title?")

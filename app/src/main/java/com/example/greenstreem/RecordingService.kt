@@ -9,6 +9,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 class RecordingService : Service() {
+    companion object {
+        @Volatile private var activeJobId: String? = null
+        fun isRecording(id: String) = activeJobId == id
+    }
     private val executor = Executors.newSingleThreadExecutor()
     private val stopped = AtomicBoolean(false)
     @Volatile private var connection: HttpURLConnection? = null
@@ -22,13 +26,14 @@ class RecordingService : Service() {
             return START_NOT_STICKY
         }
         if(active!=null) return START_NOT_STICKY
-        val job = RecordingSchedule.jobs(this).find { it.id==id } ?: run { stopSelf(); return START_NOT_STICKY }
+        val job = RecordingSchedule.jobs(this).find { it.id==id && it.state in listOf("Scheduled","Recording") } ?: run { stopSelf(); return START_NOT_STICKY }
         val manager = getSystemService(NotificationManager::class.java)
         if(Build.VERSION.SDK_INT>=26) manager.createNotificationChannel(NotificationChannel("recording","Scheduled recordings",NotificationManager.IMPORTANCE_LOW))
         val notification = if(Build.VERSION.SDK_INT>=26) Notification.Builder(this,"recording") else Notification.Builder(this)
         startForeground(801,notification.setSmallIcon(android.R.drawable.stat_sys_download).setContentTitle("Recording ${job.title}")
             .setContentText("Saving to your chosen recording folder").setOngoing(true).build())
         active=id
+        activeJobId=id
         executor.execute { record(job) }
         return START_NOT_STICKY
     }
@@ -85,7 +90,7 @@ class RecordingService : Service() {
             }
             finish(job,bytes,null)
         } catch(e: Exception) { finish(job,bytes,e) }
-        finally { timer.shutdownNow(); connection?.disconnect(); connection=null; if(wake.isHeld) wake.release(); active=null; stopForeground(true); stopSelf() }
+        finally { timer.shutdownNow(); connection?.disconnect(); connection=null; if(wake.isHeld) wake.release(); active=null; activeJobId=null; stopForeground(true); stopSelf() }
     }
     private fun finish(job: RecordingSchedule.Job, bytes: Long, error: Exception?) {
         val cancelled=stopped.get() || RecordingSchedule.jobs(this).find { it.id==job.id }?.state=="Cancelled"

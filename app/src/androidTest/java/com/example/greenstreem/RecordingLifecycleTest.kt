@@ -2,16 +2,35 @@ package com.example.greenstreem
 
 @Suppress("DEPRECATION")
 class RecordingLifecycleTest : android.app.Instrumentation() {
-    override fun onCreate(arguments: android.os.Bundle?) { super.onCreate(arguments); start() }
+    private var permissionUi=false
+    override fun onCreate(arguments: android.os.Bundle?) { permissionUi=arguments?.getString("permissionUi")=="true"; super.onCreate(arguments); start() }
     override fun onStart() {
         val result=android.os.Bundle()
-        try { testScheduledJobSurvivesBackgroundAndReportsStreamFailure(); result.putString("stream","PASS: schedule persistence, overlap rejection, background alarm and failure status"); finish(-1,result) }
+        try { if(permissionUi) testPermissionGuidance() else testScheduledJobSurvivesBackgroundAndReportsStreamFailure(); result.putString("stream","PASS: recording lifecycle / permission UI assertions"); finish(-1,result) }
         catch(e: Throwable) { result.putString("stream","FAIL: ${e}"); finish(0,result) }
     }
     private fun assertTrue(message: String, value: Boolean) { check(value) { message } }
     private fun assertEquals(expected: Any, actual: Any) { check(expected==actual) { "Expected $expected, got $actual" } }
     private fun assertFalse(value: Boolean) { check(!value) }
     private fun fail(message: String): Nothing = error(message)
+
+    private fun testPermissionGuidance() {
+        val activity=startActivitySync(android.content.Intent(targetContext,RecordingsActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            waitForIdleSync()
+            runOnMainSync {
+                fun texts(view: android.view.View): List<String> {
+                    val own=if(view is android.widget.TextView) listOf(view.text.toString()) else emptyList()
+                    return own + if(view is android.view.ViewGroup) (0 until view.childCount).flatMap { texts(view.getChildAt(it)) } else emptyList()
+                }
+                val all=texts(activity.window.decorView)
+                val guidance=all.any { it.startsWith("Scheduling needs permission") }
+                assertEquals(!RecordingSchedule.alarmAllowed(targetContext),guidance)
+                if(RecordingSchedule.jobs(targetContext).isEmpty()) assertTrue("Empty list explains scheduling",all.any { it.startsWith("No recordings yet.") })
+                assertTrue("Storage controls still present",all.contains("Recording storage"))
+            }
+        } finally { runOnMainSync { activity.finish() } }
+    }
 
     fun testScheduledJobSurvivesBackgroundAndReportsStreamFailure() {
         val md4=SmbMd4().digest(byteArrayOf()).joinToString("") { "%02x".format(it.toInt() and 255) }
@@ -32,6 +51,16 @@ class RecordingLifecycleTest : android.app.Instrumentation() {
             val start=System.currentTimeMillis()+4000
             job=RecordingSchedule.add(c,"Lifecycle test","Test channel","http://127.0.0.1:1/test.ts",start,start+60000)
             assertEquals("Scheduled",RecordingSchedule.jobs(c).single().state)
+            try { RecordingSchedule.delete(c,job.id); fail("Scheduled recordings must not be deleted") }
+            catch(expected: IllegalStateException) { }
+            val missingStorage=job.copy(id="delete-failure-fixture",state="Completed",bytes=1,
+                treeUri="content://missing.recording.test/tree/test",outputUri="content://missing.recording.test/document/test")
+            RecordingSchedule.save(c,missingStorage)
+            var deletionFailed=false
+            try { RecordingSchedule.delete(c,missingStorage.id) } catch(expected: Exception) { deletionFailed=true }
+            assertTrue("Unavailable storage must fail deletion",deletionFailed)
+            assertTrue("Failed deletion must retain its entry",RecordingSchedule.jobs(c).any { it.id==missingStorage.id })
+            c.getSharedPreferences("recordings",0).edit().putString("jobs",org.json.JSONArray(listOf(job.json())).toString()).commit()
             try {
                 RecordingSchedule.add(c,"Overlap","Test channel","http://127.0.0.1:1/test.ts",start+1000,start+30000)
                 fail("Overlapping schedules must be rejected")

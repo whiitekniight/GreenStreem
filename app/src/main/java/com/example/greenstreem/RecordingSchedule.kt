@@ -72,6 +72,21 @@ object RecordingSchedule {
             }
         }
     }
+    /** Runs on IO; remove the row only after its saved file has been deleted. */
+    fun delete(c: Context, id: String) {
+        val job=jobs(c).firstOrNull { it.id==id } ?: return
+        check(job.state !in listOf("Scheduled","Recording") && !RecordingService.isRecording(id)) { "Cancel the recording and wait for it to stop first" }
+        if(job.outputUri.isNotBlank()) {
+            check(android.provider.DocumentsContract.deleteDocument(c.contentResolver,Uri.parse(job.outputUri))) { "Could not delete the saved recording" }
+        } else if(job.treeUri.isBlank()) {
+            SmbBrowser.deleteRecording(c,job)
+        }
+        synchronized(this) {
+            val remaining=jobs(c).filter { it.id!=id }
+            check(c.getSharedPreferences("recordings",0).edit().putString("jobs",JSONArray(remaining.map { it.json() }).toString()).commit())
+        }
+    }
+
     fun cancel(c: Context, job: Job) {
         c.getSystemService(AlarmManager::class.java).cancel(pending(c,job.id))
         save(c,job.copy(state="Cancelled"))
