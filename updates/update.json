@@ -1,6 +1,6 @@
 {
-  "versionCode": 101,
-  "versionName": "1.9.65",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/9dd364e66a85db839b6f9ab3777d58205ed598fd/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "New Recordings button: schedule upcoming guide programs and replay saved recordings. Save directly to your chosen NAS/shared folder, local storage, or USB drive. Colored buttons and a simpler recording toolbar. The app can record in the background; keep the device powered on and connected."
+  "versionCode": 102,
+  "versionName": "1.9.66",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/77b51573c5806a469421e07d53d9aa1323bda6df/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "Clearer phone permission setup for scheduled recordings. Tap a recording for Play or Delete; long-press to select multiple recordings and delete them together. Record and replay from your chosen NAS/shared folder, local storage, or USB drive. Keep the device powered on and connected for scheduled recordings."
 }
