@@ -1,6 +1,6 @@
 {
-  "versionCode": 103,
-  "versionName": "1.9.67",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/a6b6f7d07dcbf6b992d3e06e80b7e07b45dffa6f/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "New Shared recordings button: browse videos in your chosen NAS/local/USB folder, including recordings from other devices. Share a USB recording folder over your home network; other GreenStreem devices can find it automatically and pair once with a six-digit code. Saved connections, playback seeking, colored buttons, and address fallback included. Keep the USB-sharing device powered on and storage connected while others watch. Shared browsing is read-only; existing recording delete controls remain available."
+  "versionCode": 104,
+  "versionName": "1.9.68",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/742f2359508a412381cd5afbeccf885ca647bff3/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "New Cast button for live TV and compatible videos on supported Google Cast and DLNA TVs. Improved live-stream audio and video timing compatibility, tested on Samsung TV and NVIDIA Shield. Casting starts without a controls popup; tap the phone video for Play/pause, Stop casting, and Change TV. No pairing or extra receiver app on supported TVs. Keep the phone/tablet on Wi-Fi while it relays a stream. Includes clearer outlined buttons and spacing. Includes an automatic built-in local/USB recording-storage chooser for Fire TV devices without a folder picker."
 }
