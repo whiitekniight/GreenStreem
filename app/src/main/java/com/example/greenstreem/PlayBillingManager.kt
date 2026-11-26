@@ -2,6 +2,11 @@ package com.example.greenstreem
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.text.InputType
+import android.widget.EditText
 import android.content.Context
 import android.widget.Toast
 import com.android.billingclient.api.AcknowledgePurchaseParams
@@ -84,6 +89,44 @@ object PlayBillingManager : PurchasesUpdatedListener {
                 }
             }
         }
+    }
+
+    fun redeemPromoCode(activity: Activity) {
+        if (!BuildConfig.PLAY_STORE_BUILD) return
+        val input = EditText(activity).apply {
+            hint = "Google Play promo code"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            setSingleLine(true)
+        }
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle("Redeem promo code")
+            .setMessage("Enter your giveaway code, then confirm it in Google Play. Return here to use Pro.")
+            .setView(input)
+            .setPositiveButton("Continue", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val code = input.text.toString().trim()
+                if (code.isEmpty()) {
+                    input.error = "Enter your promo code"
+                    return@setOnClickListener
+                }
+                val uri = Uri.parse("https://play.google.com/redeem").buildUpon()
+                    .appendQueryParameter("code", code).build()
+                try {
+                    try {
+                        activity.startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage("com.android.vending"))
+                    } catch (_: ActivityNotFoundException) {
+                        activity.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    }
+                    dialog.dismiss()
+                } catch (_: ActivityNotFoundException) {
+                    Toast.makeText(activity, "Open Google Play and choose Redeem code to enter your code.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun showProOptions(activity: Activity) {

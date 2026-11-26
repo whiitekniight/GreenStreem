@@ -42,8 +42,8 @@ android {
         minSdk = 23
         targetSdk = 36
         testInstrumentationRunner = "com.example.greenstreem.RecordingLifecycleTest"
-        versionCode = 104
-        versionName = "1.9.68"
+        versionCode = 105
+        versionName = "1.9.69"
     }
 
     flavorDimensions += "distribution"
@@ -67,6 +67,9 @@ android {
         create("play") {
             dimension = "distribution"
             applicationId = "com.greenstreem.tv"
+            // Required by Google Play automatic protection for new uploads.
+            minSdk = 24
+            // Inherit the current shared app version; keep Play feature releases aligned.
             buildConfigField("boolean", "PLAY_STORE_BUILD", "true")
             buildConfigField("boolean", "SIDELOAD_PRO_UNLOCKED", "false")
             buildConfigField("boolean", "BRANDED_SERVER_LOCKED", "false")

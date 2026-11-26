@@ -11,6 +11,11 @@ object ProFeatureGate {
             .setTitle("GreenStreem Pro")
             .setMessage(message)
             .setPositiveButton("Unlock Pro") { _, _ -> PlayBillingManager.launchProUnlock(activity) }
+            .apply {
+                if (BuildConfig.PLAY_STORE_BUILD) {
+                    setNeutralButton("Redeem code") { _, _ -> PlayBillingManager.redeemPromoCode(activity) }
+                }
+            }
             .setNegativeButton("Not now") { _, _ ->
                 if (finishOnCancel) activity.finish()
             }

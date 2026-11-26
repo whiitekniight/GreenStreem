@@ -38,6 +38,7 @@ class GreenStreemApplication : Application() {
             }
 
             override fun onActivityResumed(activity: Activity) {
+                PlayBillingManager.refreshPurchases()
                 if(RecordingShareService.enabled(activity) && !RecordingShareService.running) runCatching { RecordingShareService.start(activity) }
                 foregroundActivity=java.lang.ref.WeakReference(activity)
                 showMaintenance(activity)

@@ -49,6 +49,9 @@ class SettingsActivity : AppCompatActivity() {
             if (BuildConfig.PLAY_STORE_BUILD && !ProEntitlement.isProUnlocked(this@SettingsActivity)) {
                 add(SettingItem("Unlock Pro", "Unlock sorting, group management, and advanced EPG controls.", android.R.drawable.star_big_on))
             }
+            if (BuildConfig.PLAY_STORE_BUILD) {
+                add(SettingItem("Redeem promo code", "Use a Google Play giveaway code to unlock Pro.", android.R.drawable.ic_menu_send))
+            }
             if (!BuildConfig.PLAY_STORE_BUILD) {
                 add(SettingItem("Updates", "Check for new GreenStreem versions.", android.R.drawable.stat_sys_download_done))
             }
@@ -127,6 +130,7 @@ class SettingsActivity : AppCompatActivity() {
                     AppUpdater.checkForUpdates(this@SettingsActivity, manual = true)
                 }
                 "Unlock Pro" -> PlayBillingManager.launchProUnlock(this)
+                "Redeem promo code" -> PlayBillingManager.redeemPromoCode(this)
                 "Maintenance" -> openProFeature("Maintenance tools are available in GreenStreem Pro.") {
                     openAdvanced(AdvancedSettingsActivity.Section.OTHER.id)
                 }
