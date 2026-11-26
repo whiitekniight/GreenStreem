@@ -4,6 +4,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -32,6 +35,8 @@
         android:theme="@style/Theme.GreenStreem">
 
         <service android:name=".RecordingService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name=".RecordingShareService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <activity android:name=".SharedRecordingsActivity" android:exported="false" android:screenOrientation="landscape" android:theme="@style/Theme.GreenStreem.NoActionBar" />
         <receiver android:name=".RecordingAlarm" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

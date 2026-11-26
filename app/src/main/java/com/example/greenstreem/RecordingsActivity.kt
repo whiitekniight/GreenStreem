@@ -89,19 +89,32 @@ class RecordingsActivity : AppCompatActivity() {
         } else {
         button("Recording storage") {
             val options=mutableListOf("Choose local / USB folder", "Use network folder", "Network folder settings")
+            val previousFolders=contentResolver.persistedUriPermissions.filter { it.isReadPermission && it.isWritePermission }.map { it.uri }
+            val savedFolders=previousFolders.map { uri -> "Use saved folder: " + runCatching {
+                val documentId=android.provider.DocumentsContract.getTreeDocumentId(uri)
+                val location=if(documentId.startsWith("primary:")) "Local" else "USB"
+                "$location / ${documentId.substringAfter(':').ifBlank { "Drive folder" }}"
+            }.getOrDefault("Local / USB folder") }
+            options.addAll(savedFolders)
             if(!RecordingSchedule.alarmAllowed(this)) options.add("Allow scheduled recording alarms")
             AlertDialog.Builder(this).setTitle("Recording storage").setItems(options.toTypedArray()) { _, index ->
-                when(index) {
-                    0 -> runCatching { folderPicker.launch(null) }.onFailure { Toast.makeText(this,"No folder picker installed on this device",Toast.LENGTH_LONG).show() }
-                    1 -> { prefs.edit().remove("recording_tree_uri").apply(); showJobs() }
-                    2 -> startActivity(Intent(this,DownloadSettingsActivity::class.java))
-                    else -> startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:$packageName")))
+                when(options[index]) {
+                    "Choose local / USB folder" -> runCatching { folderPicker.launch(tree.takeIf { it.isNotBlank() }?.let(Uri::parse)) }.onFailure { Toast.makeText(this,"No folder picker installed on this device",Toast.LENGTH_LONG).show() }
+                    "Use network folder" -> { prefs.edit().remove("recording_tree_uri").apply(); showJobs() }
+                    "Network folder settings" -> startActivity(Intent(this,DownloadSettingsActivity::class.java))
+                    "Allow scheduled recording alarms" -> startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:$packageName")))
+                    else -> { prefs.edit().putString("recording_tree_uri",previousFolders[index-3].toString()).apply(); showJobs() }
                 }
             }.show()
         }
         button("Refresh") { showJobs() }
         }
         root.addView(toolbar)
+        if(selectedRecordingIds.isEmpty()) root.addView(Button(this).apply {
+            text="Shared recordings · USB / NAS / other sticks"; isAllCaps=false; setTextColor(android.graphics.Color.WHITE)
+            backgroundTintList=null; background=AppearanceTheme.buttonBackground(this@RecordingsActivity)
+            setOnClickListener { startActivity(Intent(this@RecordingsActivity,SharedRecordingsActivity::class.java)) }
+        })
         val list=ListView(this)
         list.adapter=object: ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,jobs.map {
             (if(it.id in selectedRecordingIds) "Selected: " else "") + "${it.title} • ${it.channel}\n${DateFormat.getDateTimeInstance().format(Date(it.start))} • ${it.state}\n${it.detail}"

@@ -11,6 +11,17 @@ import java.util.Properties
 object SmbBrowser {
     init { jcifs.util.Crypto.initProvider(SmbDigestProvider()) }
     data class Entry(val name: String, val isDirectory: Boolean)
+    data class RecordingFile(val name: String, val size: Long, val modified: Long)
+
+    fun listRecordings(c: android.content.Context, server: String, share: String, folder: String): List<RecordingFile> {
+        val p=c.getSharedPreferences(DownloadPrefs.PREFS_NAME,0)
+        val directory=SmbFile(directoryUrl(server,share,folder),context(
+            p.getString(DownloadPrefs.KEY_SMB_USERNAME,"").orEmpty(),p.getString(DownloadPrefs.KEY_SMB_PASSWORD,"").orEmpty()))
+        return directory.use { dir -> dir.listFiles().orEmpty().mapNotNull { child -> child.use {
+            if(it.isDirectory || !SharedRecordingLibrary.supported(it.name) || it.length()<=0) null
+            else RecordingFile(it.name,it.length(),it.lastModified())
+        } } }
+    }
 
     fun listFolders(server: String, username: String, password: String, share: String?, folder: String): List<Entry> {
         val file = SmbFile(directoryUrl(server, share, folder), context(username, password))

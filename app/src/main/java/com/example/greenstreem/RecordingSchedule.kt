@@ -96,7 +96,11 @@ object RecordingSchedule {
 
 class RecordingAlarm : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
-        if(intent.action != "record") { RecordingSchedule.restore(c); return }
+        if(intent.action != "record") {
+            RecordingSchedule.restore(c)
+            if(RecordingShareService.enabled(c)) runCatching { RecordingShareService.start(c) }
+            return
+        }
         val id = intent.data?.lastPathSegment ?: return
         val job = RecordingSchedule.jobs(c).find { it.id==id && it.state in listOf("Scheduled","Recording") } ?: return
         try {
