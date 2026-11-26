@@ -642,6 +642,11 @@
             android:textSize="18sp"
             android:textStyle="bold" />
 
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fillViewport="true"
+            android:scrollbars="none">
         <LinearLayout
             android:id="@+id/movieControlsButtons"
             android:layout_width="match_parent"
@@ -690,6 +695,7 @@
                 style="@style/GreenStreemMovieControlButton"
                 android:text="Playback" />
         </LinearLayout>
+        </HorizontalScrollView>
     </LinearLayout>
 
     <LinearLayout
@@ -748,4 +754,19 @@
         </LinearLayout>
     </LinearLayout>
 
+    <ImageButton
+        android:id="@+id/btnMovieCast"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="24dp"
+        android:padding="12dp"
+        android:src="@drawable/ic_cast_24"
+        android:background="@drawable/selector_button_bg"
+        android:contentDescription="Cast to TV"
+        android:focusable="false"
+        android:visibility="gone"
+        android:elevation="8dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

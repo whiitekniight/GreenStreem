@@ -64,7 +64,13 @@ class RecordingService : Service() {
                 require(count>=376 && (0 until 188).any { prefix[it]==0x47.toByte() && prefix[it+188]==0x47.toByte() }) {
                     "This channel does not provide a supported MPEG-TS recording stream"
                 }
-                val destination = if(job.treeUri.isNotBlank()) {
+                val destination = if(RecordingLocalFolders.direct(job.treeUri)) {
+                    val file=RecordingLocalPaths.child(RecordingLocalFolders.directory(this,job.treeUri),job.file)
+                    check(file.createNewFile()) { "A recording with this name already exists" }
+                    job=job.copy(outputUri=android.net.Uri.fromFile(file).toString())
+                    RecordingSchedule.save(this,job.copy(state="Recording"))
+                    java.io.FileOutputStream(file)
+                } else if(job.treeUri.isNotBlank()) {
                     val tree=android.net.Uri.parse(job.treeUri)
                     val parent=android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,android.provider.DocumentsContract.getTreeDocumentId(tree))
                     val document=android.provider.DocumentsContract.createDocument(contentResolver,parent,"video/mp2t",job.file)

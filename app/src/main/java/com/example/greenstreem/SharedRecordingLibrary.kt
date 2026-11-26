@@ -21,7 +21,15 @@ internal object SharedRecordingLibrary {
         val tree=p.getString("recording_tree_uri","").orEmpty()
         val jobs=RecordingSchedule.jobs(c)
         val active=jobs.filter { it.state in listOf("Scheduled","Recording") || RecordingService.isRecording(it.id) }
-        val items=if(tree.isNotBlank()) {
+        val items=if(RecordingLocalFolders.direct(tree)) {
+            val folder=RecordingLocalFolders.directory(c,tree)
+            check(folder.isDirectory) { "Recording storage is unavailable" }
+            folder.listFiles().orEmpty().filter { it.isFile && supported(it.name) && it.length()>0 }.mapNotNull { file ->
+                val uri=Uri.fromFile(file).toString()
+                if(active.any { it.outputUri==uri }) null
+                else Item(id(uri),jobs.find { it.outputUri==uri }?.title ?: file.name,file.length(),file.lastModified(),uri)
+            }
+        } else if(tree.isNotBlank()) {
             val base=Uri.parse(tree)
             val children=DocumentsContract.buildChildDocumentsUriUsingTree(base,DocumentsContract.getTreeDocumentId(base))
             val columns=arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,
@@ -52,6 +60,10 @@ internal object SharedRecordingLibrary {
     }
     fun open(c: Context, item: Item, offset: Long): InputStream {
         if(item.uri.isNotBlank()) {
+            if(RecordingLocalFolders.direct(item.uri)) {
+                val input=java.io.FileInputStream(RecordingLocalFolders.file(c,item.uri))
+                try { input.channel.position(offset);return input } catch(e: Exception) { input.close();throw e }
+            }
             val descriptor=c.contentResolver.openFileDescriptor(Uri.parse(item.uri),"r") ?: error("Storage is unavailable")
             val input=android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)
             try { input.channel.position(offset); return input } catch(e: Exception) { input.close(); throw e }

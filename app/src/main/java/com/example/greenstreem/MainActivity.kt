@@ -199,6 +199,14 @@ class MainActivity : FragmentActivity() {
     private val zapBarHandler = Handler(Looper.getMainLooper())
     private var zapBarRunnable: Runnable? = null
     private val movieControlsHandler = Handler(Looper.getMainLooper())
+    private val castButtonHandler = Handler(Looper.getMainLooper())
+    private val hideCastButton = Runnable {
+        findViewById<View>(R.id.btnMovieCast)?.let { button ->
+            if(currentState==UiState.FULL_SCREEN) button.animate().alpha(0f).setDuration(250).withEndAction {
+                if(button.alpha==0f) button.visibility=View.INVISIBLE
+            }.start()
+        }
+    }
     private var movieControlsHideRunnable: Runnable? = null
     private var movieControlsTickRunnable: Runnable? = null
     private val vodResumeHandler = Handler(Looper.getMainLooper())
@@ -293,6 +301,7 @@ class MainActivity : FragmentActivity() {
     private var didInitialCategoryLoad = false
     private var lastVodAudioWarningKey: String? = null
     private var currentVodUrl: String? = null
+    private val tvCasting by lazy { TvCastingController(this) }
     private var currentVodTitle: String? = null
     private var seriesEpisodeUrls: List<String> = emptyList()
     private var seriesEpisodeTitles: List<String> = emptyList()
@@ -818,6 +827,12 @@ class MainActivity : FragmentActivity() {
             R.id.navExit
         ).forEach { id ->
             navRail.findViewById<View>(id)?.background = AppearanceTheme.buttonBackground(this)
+        }
+        findViewById<View>(R.id.btnMovieCast)?.background=AppearanceTheme.buttonBackground(this)
+        if(::movieControlsButtons.isInitialized) {
+            for(index in 0 until (movieControlsButtons as android.view.ViewGroup).childCount) {
+                (movieControlsButtons as android.view.ViewGroup).getChildAt(index).background=AppearanceTheme.buttonBackground(this)
+            }
         }
         pbProgramProgress?.progressDrawable = AppearanceTheme.progressDrawable(this)
         if (::pbMovieControlsProgress.isInitialized) {
@@ -1769,6 +1784,16 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun setupMovieControls() {
+        findViewById<View>(R.id.btnMovieCast)?.let(CastSupport::safeButtonPlacement)
+        findViewById<View>(R.id.btnMovieCast)?.setOnClickListener {
+            keepMovieControlsVisible()
+            val url=currentVodUrl ?: currentLivePlaybackUrl
+            val media=url?.let { CastSupport.Media(it,currentVodTitle ?: currentChannel?.name ?: "GreenStreem",currentVodUrl==null,
+                if(currentVodUrl==null) 0 else CastSupport.position(player),
+                IPTV_PLAYER_HEADERS + ("User-Agent" to IPTV_PLAYER_USER_AGENT),
+                googleUrl=if(currentVodUrl==null) CastMediaUrls.googleLive(it,currentLivePlaybackUrls) else null) }
+            tvCasting.open(media) { player?.pause() }
+        }
         btnMoviePlayPause.setOnClickListener {
             toggleMoviePlayPause()
         }
@@ -1814,6 +1839,15 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private fun revealCastButton() {
+        if(currentState!=UiState.FULL_SCREEN || !isTouchscreenPhone()) return
+        findViewById<View>(R.id.btnMovieCast)?.let { button ->
+            button.animate().cancel(); button.alpha=1f; button.visibility=View.VISIBLE
+            castButtonHandler.removeCallbacks(hideCastButton)
+            castButtonHandler.postDelayed(hideCastButton,10_000)
+        }
+    }
+
     private fun handlePhoneMovieTap(): Boolean {
         if (!isTouchscreenPhone()) return false
         if (currentState != UiState.FULL_SCREEN ||
@@ -1853,7 +1887,16 @@ class MainActivity : FragmentActivity() {
                 }
                 MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> phoneTouchIsTap = false
                 MotionEvent.ACTION_UP -> {
-                    if (phoneTouchIsTap) window.showMobileSystemBarsTemporarily()
+                    if (phoneTouchIsTap) {
+                        window.showMobileSystemBarsTemporarily(); revealCastButton()
+                        if(currentState==UiState.FULL_SCREEN && tvCasting.isCasting) {
+                            val cancel=MotionEvent.obtain(event).apply { action=MotionEvent.ACTION_CANCEL }
+                            try { super.dispatchTouchEvent(cancel) } finally { cancel.recycle() }
+                            phoneTouchIsTap=false
+                            tvCasting.showControlsOnTap()
+                            return true
+                        }
+                    }
                     phoneTouchIsTap = false
                 }
             }
@@ -5645,6 +5688,9 @@ class MainActivity : FragmentActivity() {
             hideInlineVodActions(restoreGrid = false)
         }
         currentState = newState
+        castButtonHandler.removeCallbacks(hideCastButton)
+        findViewById<View>(R.id.btnMovieCast)?.let { it.animate().cancel(); it.alpha=1f; it.visibility=View.GONE }
+        if(newState==UiState.FULL_SCREEN) revealCastButton()
         if (currentMode == ContentMode.LIVE_TV) {
             (rvContent as? FocusStableRecyclerView)?.suppressFocusDrivenScroll = false
             rvContent.clipChildren = true
@@ -8271,6 +8317,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        castButtonHandler.removeCallbacks(hideCastButton)
         CloudBackupManager.setPlaybackActive(false)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         saveVodResumeProgress()

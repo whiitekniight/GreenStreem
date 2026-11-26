@@ -42,8 +42,8 @@ android {
         minSdk = 23
         targetSdk = 36
         testInstrumentationRunner = "com.example.greenstreem.RecordingLifecycleTest"
-        versionCode = 103
-        versionName = "1.9.67"
+        versionCode = 104
+        versionName = "1.9.68"
     }
 
     flavorDimensions += "distribution"
@@ -146,6 +146,7 @@ tasks.configureEach {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-cast-framework:22.3.1")
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     testImplementation("junit:junit:4.13.2")
     implementation(libs.androidx.core.ktx)

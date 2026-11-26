@@ -31,16 +31,19 @@ object AppearanceTheme {
         val focused = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = context.dp(4).toFloat()
-            setColor(accentColor(context))
-            setStroke(context.dp(2), Color.WHITE)
+            setColor(Color.parseColor("#101820"))
+            setStroke(context.dp(3), accentColor(context))
         }
         val normal = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = context.dp(4).toFloat()
-            setColor(androidx.core.graphics.ColorUtils.blendARGB(accentColor(context), Color.BLACK, 0.45f))
+            setColor(Color.parseColor("#101820"))
+            setStroke(context.dp(1), accentColor(context))
         }
         return StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_focused), focused)
+            addState(intArrayOf(android.R.attr.state_pressed), focused)
+            addState(intArrayOf(android.R.attr.state_selected), focused)
             addState(intArrayOf(), normal)
         }
     }
@@ -86,8 +89,8 @@ object AppearanceTheme {
         val focused = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = context.dp(4).toFloat()
-            setColor(accentColor(context))
-            setStroke(context.dp(2), Color.WHITE)
+            setColor(Color.parseColor("#CC111923"))
+            setStroke(context.dp(3), accentColor(context))
         }
         val normal = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -105,8 +108,8 @@ object AppearanceTheme {
         val focused = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = context.dp(5).toFloat()
-            setColor(accentColor(context))
-            setStroke(context.dp(1), Color.WHITE)
+            setColor(Color.parseColor("#101820"))
+            setStroke(context.dp(3), accentColor(context))
         }
         val normal = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE

@@ -27,10 +27,11 @@ class RecordingsActivity : AppCompatActivity() {
         if(uri!=null) runCatching {
             contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             getSharedPreferences(DownloadPrefs.PREFS_NAME,0).edit().putString("recording_tree_uri",uri.toString()).apply()
-        }.onFailure { Toast.makeText(this,"Could not keep access to this folder",Toast.LENGTH_LONG).show() }
+        }.onFailure { chooseBuiltInStorage() }
         showJobs()
     }
     private var player: ExoPlayer?=null
+    private val casting by lazy { TvCastingController(this) }
     private val selectedRecordingIds=linkedSetOf<String>()
     private var recordingList: ListView?=null
     private fun canDelete(job: RecordingSchedule.Job) = job.state !in listOf("Scheduled","Recording") && !RecordingService.isRecording(job.id)
@@ -62,7 +63,7 @@ class RecordingsActivity : AppCompatActivity() {
         val prefs=getSharedPreferences(DownloadPrefs.PREFS_NAME,0)
         val tree=prefs.getString("recording_tree_uri", "").orEmpty()
         root.addView(TextView(this).apply {
-            text=if(tree.isBlank()) "Saving to: Network folder" else "Saving to: Local / USB folder"
+            text=if(tree.isBlank()) "Saving to: Network folder" else if(RecordingLocalFolders.direct(tree)) "Saving to: ${RecordingLocalFolders.label(this@RecordingsActivity,tree)}" else "Saving to: Local / USB folder"
             setTextColor(android.graphics.Color.LTGRAY); textSize=16f; setPadding(0,6,0,18)
         })
         if(!RecordingSchedule.alarmAllowed(this)) root.addView(TextView(this).apply {
@@ -81,7 +82,7 @@ class RecordingsActivity : AppCompatActivity() {
                 text=label; isAllCaps=false; textSize=16f; setTextColor(android.graphics.Color.WHITE)
                 backgroundTintList=null; background=AppearanceTheme.buttonBackground(this@RecordingsActivity)
                 setOnClickListener { action() }
-            }, LinearLayout.LayoutParams(0,android.view.ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply { rightMargin=16 })
+            }, LinearLayout.LayoutParams(0,android.view.ViewGroup.LayoutParams.WRAP_CONTENT,1f).apply { rightMargin=(12*resources.displayMetrics.density).toInt() })
         }
         if(selectedRecordingIds.isNotEmpty()) {
             button("Delete selected (${selectedRecordingIds.size})") { confirmDelete(jobs.filter { it.id in selectedRecordingIds }) }
@@ -99,7 +100,9 @@ class RecordingsActivity : AppCompatActivity() {
             if(!RecordingSchedule.alarmAllowed(this)) options.add("Allow scheduled recording alarms")
             AlertDialog.Builder(this).setTitle("Recording storage").setItems(options.toTypedArray()) { _, index ->
                 when(options[index]) {
-                    "Choose local / USB folder" -> runCatching { folderPicker.launch(tree.takeIf { it.isNotBlank() }?.let(Uri::parse)) }.onFailure { Toast.makeText(this,"No folder picker installed on this device",Toast.LENGTH_LONG).show() }
+                    "Choose local / USB folder" -> runCatching {
+                        folderPicker.launch(tree.takeIf { it.isNotBlank() && !RecordingLocalFolders.direct(it) }?.let(Uri::parse))
+                    }.onFailure { chooseBuiltInStorage() }
                     "Use network folder" -> { prefs.edit().remove("recording_tree_uri").apply(); showJobs() }
                     "Network folder settings" -> startActivity(Intent(this,DownloadSettingsActivity::class.java))
                     "Allow scheduled recording alarms" -> startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:$packageName")))
@@ -141,6 +144,37 @@ class RecordingsActivity : AppCompatActivity() {
         root.addView(list,LinearLayout.LayoutParams(-1,0,1f)); setContentView(root)
         recordingList=list
         list.setSelectionFromTop(previousPosition.coerceAtMost((jobs.size-1).coerceAtLeast(0)),previousOffset)
+    }
+    private fun chooseBuiltInStorage() {
+        lifecycleScope.launch {
+            val targets=withContext(Dispatchers.IO) { RecordingLocalFolders.available(this@RecordingsActivity) }
+            if(isFinishing)return@launch
+            val root=LinearLayout(this@RecordingsActivity).apply { orientation=LinearLayout.VERTICAL;setPadding(24,16,24,16) }
+            root.addView(TextView(this@RecordingsActivity).apply {
+                text="Choose where to save recordings. GreenStreem uses its own folder on that drive. Removing the app may remove these files."+
+                    if(targets.none { it.removable }) "\nUSB storage appears here when the device makes it available." else ""
+                setTextColor(android.graphics.Color.LTGRAY);textSize=16f;setPadding(0,0,0,16)
+            })
+            val dialog=AlertDialog.Builder(this@RecordingsActivity).setTitle("Choose recording storage").setView(root).setNegativeButton("Cancel",null).create()
+            targets.forEach { target ->
+                root.addView(Button(this@RecordingsActivity).apply {
+                    text=target.label;isAllCaps=false;setTextColor(android.graphics.Color.WHITE);backgroundTintList=null
+                    background=AppearanceTheme.buttonBackground(this@RecordingsActivity)
+                    setOnClickListener {
+                        isEnabled=false
+                        lifecycleScope.launch {
+                            val result=withContext(Dispatchers.IO) { runCatching { RecordingLocalFolders.prepare(this@RecordingsActivity,target) } }
+                            if(isFinishing)return@launch
+                            result.onSuccess { uri ->
+                                getSharedPreferences(DownloadPrefs.PREFS_NAME,0).edit().putString("recording_tree_uri",uri).apply()
+                                dialog.dismiss();showJobs()
+                            }.onFailure { Toast.makeText(this@RecordingsActivity,it.message ?: "Storage is unavailable",Toast.LENGTH_LONG).show();isEnabled=true }
+                        }
+                    }
+                },LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=(12*resources.displayMetrics.density).toInt() })
+            }
+            dialog.show()
+        }
     }
     private fun showRecordingActions(job: RecordingSchedule.Job) {
         val actions=mutableListOf<String>()
@@ -215,7 +249,7 @@ class RecordingsActivity : AppCompatActivity() {
             it.setMediaSource(ProgressiveMediaSource.Factory(factory).createMediaSource(MediaItem.fromUri(if(job.outputUri.isNotBlank()) job.outputUri else "smb://recording/${job.id}.ts")))
             it.prepare(); it.play()
         }
-        setContentView(view)
+        setContentView(casting.wrapPlayer(view,{ CastSupport.recording(applicationContext,job).copy(position=CastSupport.position(player)) }) { player?.pause() })
     }
     override fun onStop() { player?.release(); player=null; super.onStop() }
 }

@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class SharedRecordingsActivity: AppCompatActivity() {
     private var player: ExoPlayer?=null
+    private val casting by lazy { TvCastingController(this) }
     private var discovery: RecordingPeerDiscovery?=null
     private var generation=0
     private var screen="home"
@@ -48,7 +49,7 @@ class SharedRecordingsActivity: AppCompatActivity() {
         root.addView(Button(this).apply {
             text=label; isAllCaps=false; textSize=16f; setTextColor(Color.WHITE); backgroundTintList=null
             background=AppearanceTheme.buttonBackground(this@SharedRecordingsActivity); setOnClickListener { action() }
-        },LinearLayout.LayoutParams(-1,ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin=8 })
+        },LinearLayout.LayoutParams(-1,ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin=(12*resources.displayMetrics.density).toInt() })
     }
     private fun message(text: String)=Toast.makeText(this,text,Toast.LENGTH_LONG).show()
     override fun onCreate(state: Bundle?) {
@@ -195,7 +196,7 @@ class SharedRecordingsActivity: AppCompatActivity() {
                 val bar=LinearLayout(this@SharedRecordingsActivity).apply { orientation=LinearLayout.HORIZONTAL }
                 fun barButton(label: String,action: ()->Unit) { bar.addView(Button(this@SharedRecordingsActivity).apply {
                     text=label; isAllCaps=false; setTextColor(Color.WHITE); backgroundTintList=null; background=AppearanceTheme.buttonBackground(this@SharedRecordingsActivity); setOnClickListener { action() }
-                },LinearLayout.LayoutParams(0,-2,1f).apply { rightMargin=12 }) }
+                },LinearLayout.LayoutParams(0,-2,1f).apply { rightMargin=(12*resources.displayMetrics.density).toInt() }) }
                 barButton("Refresh") { showLibrary(peer) }; barButton("Back") { home() }; root.addView(bar)
                 val list=ListView(this@SharedRecordingsActivity)
                 list.adapter=ArrayAdapter(this@SharedRecordingsActivity,android.R.layout.simple_list_item_1,items.map { "${it.title}\n${android.text.format.Formatter.formatFileSize(this@SharedRecordingsActivity,it.size)}" })
@@ -238,7 +239,11 @@ class SharedRecordingsActivity: AppCompatActivity() {
             val uri=if(peer==null) item.uri.ifBlank { "smb://recording/${item.id}" } else base(peer)+"/file/${item.id}"
             it.setMediaItem(MediaItem.fromUri(uri)); it.prepare(); it.play()
         }
-        setContentView(view)
+        setContentView(casting.wrapPlayer(view,{
+            val relay=if(peer==null) CastSupport.Relay(item.job?.file ?: Uri.parse(item.uri).lastPathSegment?.substringAfterLast('/') ?: "recording.ts",item.size,item)
+                else CastSupport.Relay("recording.ts",item.size,remoteUrl=base(peer)+"/file/${item.id}",headers=mapOf("Authorization" to "Bearer ${token(peer)}"))
+            CastSupport.Media("",item.title,position=CastSupport.position(player),relay=relay)
+        }) { player?.pause() })
     }
     override fun onStop() { discovery?.stop(); discovery=null; player?.release(); player=null; super.onStop() }
     override fun onRestart() { super.onRestart(); if(screen=="library") showLibrary(currentPeer) else home() }

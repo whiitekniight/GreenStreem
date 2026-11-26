@@ -54,7 +54,10 @@ object RecordingSchedule {
         val share = p.getString(DownloadPrefs.KEY_SMB_SHARE,"").orEmpty()
         val tree = p.getString("recording_tree_uri", "").orEmpty()
         require(tree.isNotBlank() || (server.isNotBlank() && share.isNotBlank())) { "Choose a recording folder first" }
-        if(tree.isNotBlank()) require(c.contentResolver.persistedUriPermissions.any { it.uri.toString()==tree && it.isWritePermission }) { "Select your local or USB recording folder again" }
+        if(tree.isNotBlank()) {
+            if(RecordingLocalFolders.direct(tree)) require(RecordingLocalFolders.directory(c,tree).canWrite()) { "Recording storage is unavailable" }
+            else require(c.contentResolver.persistedUriPermissions.any { it.uri.toString()==tree && it.isWritePermission }) { "Select your local or USB recording folder again" }
+        }
         val folder = p.getString(DownloadPrefs.KEY_SMB_FOLDER,"").orEmpty()
         val id = UUID.randomUUID().toString()
         val job = Job(id,title,channel,url,start,end,server,share,folder,
@@ -77,7 +80,10 @@ object RecordingSchedule {
         val job=jobs(c).firstOrNull { it.id==id } ?: return
         check(job.state !in listOf("Scheduled","Recording") && !RecordingService.isRecording(id)) { "Cancel the recording and wait for it to stop first" }
         if(job.outputUri.isNotBlank()) {
-            check(android.provider.DocumentsContract.deleteDocument(c.contentResolver,Uri.parse(job.outputUri))) { "Could not delete the saved recording" }
+            if(RecordingLocalFolders.direct(job.outputUri)) {
+                val file=RecordingLocalFolders.file(c,job.outputUri)
+                check(file.delete()) { "Could not delete the saved recording" }
+            } else check(android.provider.DocumentsContract.deleteDocument(c.contentResolver,Uri.parse(job.outputUri))) { "Could not delete the saved recording" }
         } else if(job.treeUri.isBlank()) {
             SmbBrowser.deleteRecording(c,job)
         }

@@ -36,6 +36,8 @@
 
         <service android:name=".RecordingService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".RecordingShareService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <service android:name=".CastMediaRelayService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <meta-data android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME" android:value="com.example.greenstreem.GreenStreemCastOptions" />
         <activity android:name=".SharedRecordingsActivity" android:exported="false" android:screenOrientation="landscape" android:theme="@style/Theme.GreenStreem.NoActionBar" />
         <receiver android:name=".RecordingAlarm" android:exported="false">
             <intent-filter>
