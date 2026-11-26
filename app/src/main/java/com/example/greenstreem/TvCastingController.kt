@@ -15,6 +15,8 @@ import com.google.android.gms.cast.MediaSeekOptions
 import com.google.android.gms.cast.framework.*
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** One Cast button and one device list. No app receivers, app pairing, or protocol choices. */
 internal class TvCastingController(private val activity: FragmentActivity) {
@@ -24,9 +26,12 @@ internal class TvCastingController(private val activity: FragmentActivity) {
         var sessionGoogle=false
         var sessionLive=false
         var sessionMedia: CastSupport.Media?=null
+        var sessionLoadedUrl: String?=null
+        val mediaLoadMutex=Mutex()
     }
     private val scope get()=activity.lifecycleScope
     private var dlnaJob: Job?=null
+    private var mediaLoadJob: Job?=null
     private var chooser: AlertDialog?=null
     private var controls: AlertDialog?=null
     private var multicast: android.net.wifi.WifiManager.MulticastLock?=null
@@ -59,7 +64,7 @@ internal class TvCastingController(private val activity: FragmentActivity) {
         override fun onSessionStartFailed(session: CastSession,error: Int) { googlePending=null; message("Could not connect to that TV") }
         override fun onSessionResumeFailed(session: CastSession,error: Int) { googlePending=null }
         override fun onSessionEnded(session: CastSession,error: Int) {
-            val wasActive=activeGoogle; activeGoogle=false; unregisterGoogleCallback(session)
+            val wasActive=activeGoogle; activeGoogle=false;sessionLoadedUrl=null; unregisterGoogleCallback(session)
             if(wasActive && activeDlna==null) CastMediaRelayService.stop(activity)
         }
         override fun onSessionStarting(session: CastSession) {}
@@ -83,9 +88,32 @@ internal class TvCastingController(private val activity: FragmentActivity) {
             castContext=it; it.sessionManager.addSessionManagerListener(sessionListener,CastSession::class.java)
         }
     }.getOrNull()
+    /** Tune the already-selected TV without opening discovery or another picker. */
+    fun replaceMedia(media: CastSupport.Media,started: ()->Unit={}): Boolean {
+        val dlna=activeDlna
+        if(dlna==null && !activeGoogle) return false
+        if(media.url==sessionLoadedUrl && mediaLoadJob?.isActive!=true) {
+            requestedMedia=media;requestedStarted=started;started();return true
+        }
+        requestedMedia=media
+        requestedStarted=started
+        controls?.dismiss()
+        chooser?.dismiss()
+        stopDiscovery()
+        if(dlna!=null) loadDlna(dlna,media,started)
+        else {
+            val session=initializeGoogle()?.sessionManager?.currentCastSession
+            if(session?.isConnected!=true) { activeGoogle=false; return false }
+            googlePending=media to started
+            sendGoogle(session)
+        }
+        return true
+    }
+
     fun open(media: CastSupport.Media?,selectDevice: Boolean=false,started: ()->Unit={}) {
         requestedStarted=started
         if(isCasting && !selectDevice && (media==null || media.url==requestedMedia?.url)) { showControls();return }
+        if(isCasting && !selectDevice && media!=null && replaceMedia(media,started)) return
         if(!ProFeatureGate.require(activity,"Casting is available in GreenStreem Pro.")) return
         if(media==null) { message("Start playing a video first, then tap Cast"); return }
         requestedMedia=media;requestedStarted=started
@@ -167,7 +195,8 @@ internal class TvCastingController(private val activity: FragmentActivity) {
     }
     private fun loadDlna(device: DlnaCasting.Device,media: CastSupport.Media,started: ()->Unit) {
         message("Connecting to ${device.name}…")
-        scope.launch {
+        mediaLoadJob?.cancel()
+        mediaLoadJob=scope.launch { mediaLoadMutex.withLock {
             runCatching {
                 switchTarget()
                 activeDlna?.takeIf { it.endpoint!=device.endpoint }?.let { old -> withContext(Dispatchers.IO) { runCatching { DlnaCasting.action(old,"Stop") } } }
@@ -176,11 +205,14 @@ internal class TvCastingController(private val activity: FragmentActivity) {
                 var playing=false
                 repeat(12) { if(!playing) { delay(500); playing=withContext(Dispatchers.IO) { DlnaCasting.playing(device) } } }
                 check(playing) { "The TV could not play this video format. Phone playback is still available." }
-                activeDlna=device; activeGoogle=false; activeLive=media.live
+                activeDlna=device; activeGoogle=false; activeLive=media.live;sessionLoadedUrl=media.url
                 if(media.relay==null && !prepared.proxied) CastMediaRelayService.stop(activity)
                 started(); chooser?.dismiss()
-            }.onFailure { CastMediaRelayService.stop(activity);message(it.message ?: "The TV could not play this video") }
-        }
+            }.onFailure {
+                if(it is CancellationException) throw it
+                CastMediaRelayService.stop(activity);message(it.message ?: "The TV could not play this video")
+            }
+        } }
     }
     private fun chooseGoogle(route: MediaRouter.RouteInfo,media: CastSupport.Media,started: ()->Unit) {
         googlePending=media to started
@@ -195,7 +227,10 @@ internal class TvCastingController(private val activity: FragmentActivity) {
         val pending=googlePending ?: return
         googlePending=null
         val attempt=++googleAttempt
-        scope.launch {
+        sessionLoadedUrl=null
+        unregisterGoogleCallback(session)
+        mediaLoadJob?.cancel()
+        mediaLoadJob=scope.launch { mediaLoadMutex.withLock {
             runCatching {
                 switchTarget(google=true)
                 val media=prepare(if(pending.first.live) pending.first else pending.first.copy(url=pending.first.googleUrl ?: pending.first.url),google=true)
@@ -217,7 +252,7 @@ internal class TvCastingController(private val activity: FragmentActivity) {
                     override fun onStatusUpdated() {
                         if(attempt!=googleAttempt) return
                         if(!accepted && client.mediaStatus?.playerState==com.google.android.gms.cast.MediaStatus.PLAYER_STATE_PLAYING) {
-                            accepted=true; googleLoadTimeout?.cancel(); activeGoogle=true; activeDlna=null; activeLive=media.live
+                            accepted=true; googleLoadTimeout?.cancel(); activeGoogle=true; activeDlna=null; activeLive=media.live;sessionLoadedUrl=pending.first.url
                             if(pending.first.relay==null && !media.proxied) CastMediaRelayService.stop(activity)
                             pending.second(); chooser?.dismiss()
                         }
@@ -232,8 +267,11 @@ internal class TvCastingController(private val activity: FragmentActivity) {
                 client.load(load.build()).setResultCallback {
                     if(!it.status.isSuccess) failed()
                 }
-            }.onFailure { CastMediaRelayService.stop(activity);message(it.message ?: "Could not cast this video") }
-        }
+            }.onFailure {
+                if(it is CancellationException) throw it
+                CastMediaRelayService.stop(activity);message(it.message ?: "Could not cast this video")
+            }
+        } }
     }
     private fun showControls() {
         if(activeGoogle)initializeGoogle()
@@ -253,6 +291,13 @@ internal class TvCastingController(private val activity: FragmentActivity) {
             .setView(ScrollView(activity).apply { addView(root) }).setNegativeButton("Close",null).show()
     }
     private fun command(action: String,delta: Long=0) {
+        if(action=="stop") {
+            mediaLoadJob?.cancel()
+            sessionLoadedUrl=null
+            googleAttempt++
+            googlePending=null
+            unregisterGoogleCallback(castContext?.sessionManager?.currentCastSession)
+        }
         scope.launch {
             runCatching {
                 val dlna=activeDlna
@@ -316,6 +361,7 @@ internal class TvCastingController(private val activity: FragmentActivity) {
         }
     }
     fun close() {
+        mediaLoadJob?.cancel()
         stopDiscovery(); chooser?.dismiss(); controls?.dismiss()
         unregisterGoogleCallback(castContext?.sessionManager?.currentCastSession)
         castContext?.sessionManager?.removeSessionManagerListener(sessionListener,CastSession::class.java)

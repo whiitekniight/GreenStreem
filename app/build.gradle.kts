@@ -42,8 +42,8 @@ android {
         minSdk = 23
         targetSdk = 36
         testInstrumentationRunner = "com.example.greenstreem.RecordingLifecycleTest"
-        versionCode = 105
-        versionName = "1.9.69"
+        versionCode = 106
+        versionName = "1.9.70"
     }
 
     flavorDimensions += "distribution"

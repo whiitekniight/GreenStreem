@@ -2,14 +2,17 @@ package com.example.greenstreem
 
 @Suppress("DEPRECATION")
 class RecordingLifecycleTest : android.app.Instrumentation() {
+    private var nativeCastTarget: String?=null
+    private var guideUi=false
     private var permissionUi=false
     private var storageProbe=false
     private var fallbackUi=false
-    override fun onCreate(arguments: android.os.Bundle?) { permissionUi=arguments?.getString("permissionUi")=="true";storageProbe=arguments?.getString("storageProbe")=="true";fallbackUi=arguments?.getString("fallbackUi")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments: android.os.Bundle?) { guideUi=arguments?.getString("guideUi")=="true"; nativeCastTarget=arguments?.getString("nativeCastTarget"); permissionUi=arguments?.getString("permissionUi")=="true";storageProbe=arguments?.getString("storageProbe")=="true";fallbackUi=arguments?.getString("fallbackUi")=="true"; super.onCreate(arguments); start() }
     override fun onStart() {
         val result=android.os.Bundle()
         try {
-            if(storageProbe) {
+            if(guideUi) { GuideFeedbackChecks(this,nativeCastTarget).run() }
+            else if(storageProbe) {
                 val targets=RecordingLocalFolders.available(targetContext)
                 check(targets.any { it.removable }) { "No app-accessible USB storage found" }
                 targets.forEach { RecordingLocalFolders.prepare(targetContext,it) }
@@ -17,9 +20,9 @@ class RecordingLifecycleTest : android.app.Instrumentation() {
             } else if(fallbackUi) testMissingPickerFallback()
             else if(permissionUi) testPermissionGuidance()
             else { testScheduledJobSurvivesBackgroundAndReportsStreamFailure();testDirectStorageRecording() }
-            result.putString("stream","PASS: recording lifecycle / local storage assertions");finish(-1,result)
+            result.putString("stream",if(guideUi) "PASS: tablet header / fixed cursor / refresh / cast retune / remote Back assertions" else "PASS: recording lifecycle / local storage assertions");finish(-1,result)
         }
-        catch(e: Throwable) { result.putString("stream","FAIL: ${e}"); finish(0,result) }
+        catch(e: Throwable) { result.putString("stream","FAIL: ${e}\n${android.util.Log.getStackTraceString(e)}"); finish(0,result) }
     }
     private fun assertTrue(message: String, value: Boolean) { check(value) { message } }
     private fun assertEquals(expected: Any, actual: Any) { check(expected==actual) { "Expected $expected, got $actual" } }
@@ -72,8 +75,19 @@ class RecordingLifecycleTest : android.app.Instrumentation() {
         val oldJobs=store.getString("jobs",null)
         var job: RecordingSchedule.Job?=null
         val packet=ByteArray(188) { 0xff.toByte() }.apply { this[0]=0x47;this[1]=0x1f;this[2]=0xff.toByte();this[3]=0x10 }
+        val entryRequests=java.util.concurrent.atomic.AtomicInteger()
+        val firstLeaseRequests=java.util.concurrent.atomic.AtomicInteger()
         val server=object: fi.iki.elonen.NanoHTTPD("127.0.0.1",0) {
-            override fun serve(session: IHTTPSession): Response = newChunkedResponse(Response.Status.OK,"video/mp2t",object: java.io.InputStream() {
+            override fun serve(session: IHTTPSession): Response {
+                if(session.uri=="/test.ts") return newFixedLengthResponse(Response.Status.FOUND,"text/plain","").apply {
+                    addHeader("Location","/lease/${entryRequests.incrementAndGet()}")
+                }
+                if(session.uri=="/lease/1") {
+                    firstLeaseRequests.incrementAndGet()
+                    val initial=ByteArray(188*12) { packet[it%188] }
+                    return newFixedLengthResponse(Response.Status.OK,"video/mp2t",java.io.ByteArrayInputStream(initial),initial.size.toLong())
+                }
+                return newChunkedResponse(Response.Status.OK,"video/mp2t",object: java.io.InputStream() {
                 private var position=0
                 override fun read(): Int { val result=packet[position%188].toInt() and 255;position++;return result }
                 override fun read(bytes: ByteArray,offset: Int,length: Int): Int {
@@ -82,7 +96,8 @@ class RecordingLifecycleTest : android.app.Instrumentation() {
                     repeat(count) { bytes[offset+it]=read().toByte() }
                     return count
                 }
-            })
+                })
+            }
         }
         try {
             val target=RecordingLocalFolders.available(c).first { !it.removable }
@@ -90,14 +105,16 @@ class RecordingLifecycleTest : android.app.Instrumentation() {
             prefs.edit().putString("recording_tree_uri",tree).commit();store.edit().putString("jobs","[]").commit()
             server.start(5000,true)
             val start=System.currentTimeMillis()+2000
-            val scheduled=RecordingSchedule.add(c,"Local storage test","Test channel","http://127.0.0.1:${server.listeningPort}/test.ts",start,start+4000)
+            val scheduled=RecordingSchedule.add(c,"Local storage test","Test channel","http://127.0.0.1:${server.listeningPort}/test.ts",start,start+12000)
             job=scheduled
-            val limit=System.currentTimeMillis()+20000
+            val limit=System.currentTimeMillis()+30000
             while(System.currentTimeMillis()<limit && RecordingSchedule.jobs(c).first { it.id==scheduled.id }.state in listOf("Scheduled","Recording")) Thread.sleep(200)
             val result=RecordingSchedule.jobs(c).first { it.id==scheduled.id }
             val stoppedBy=System.currentTimeMillis()+2000
             while(RecordingService.isRecording(scheduled.id) && System.currentTimeMillis()<stoppedBy) Thread.sleep(50)
             assertEquals("Completed",result.state)
+            assertTrue("Fresh provider redirect was requested after the first lease ended",entryRequests.get()>=2)
+            assertEquals(1,firstLeaseRequests.get())
             assertTrue("Recording has bytes",result.bytes>=376)
             assertTrue("Uses app-owned local storage without SAF permission",result.outputUri.startsWith("file:"))
             val item=SharedRecordingLibrary.list(c).first { it.uri==result.outputUri }
@@ -171,7 +188,7 @@ class RecordingLifecycleTest : android.app.Instrumentation() {
                 fail("Overlapping schedules must be rejected")
             } catch(expected: IllegalArgumentException) { }
             c.startActivity(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-            val deadline=System.currentTimeMillis()+25000
+            val deadline=System.currentTimeMillis()+45000
             while(System.currentTimeMillis()<deadline && RecordingSchedule.jobs(c).single().state in listOf("Scheduled","Recording")) Thread.sleep(250)
             val result=RecordingSchedule.jobs(c).single()
             assertEquals("Failed",result.state)

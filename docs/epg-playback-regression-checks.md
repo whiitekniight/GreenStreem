@@ -58,3 +58,42 @@ be shorter than the configured browsing range.
 
 `EpgGuideRangeTest` checks page overlap, navigation bounds, and reaching all four
 configured ranges. Normal command: `:app:testBrandedSideloadDebugUnitTest`.
+
+
+## Tablet guide header and convenient refresh
+
+1. Scroll down through at least 60 channels using touch, then back upward. The clock
+   and time labels must stay visible above the rows. Repeat with Android/Samsung
+   system bars shown and hidden; window insets may move the whole app, but rows must
+   never cover the guide header.
+2. Swipe horizontally and vertically. The guide cursor must retain its X position.
+3. Open the Menu quick panel and select Update EPG now. Verify the refresh completes
+   without visiting Settings. Existing Pro access requirements still apply.
+
+## TV Back and casting channel changes
+
+1. Short Back keeps its existing behavior, including closing movie controls first.
+2. Hold remote Back from the player/guide: return directly to the device's Home,
+   without selecting Exit. Independent recording services must not be stopped.
+3. Cast a live channel, then select another channel on the sending device. The
+   connected TV must load it without discovery, pairing or picking the TV again.
+4. Select several channels quickly. Only the newest load may win. Repeat with
+   Google Cast and a DLNA receiver. Verify Stop casting cancels a pending load.
+5. Return from an internal screen during casting. The phone/tablet must not restart
+   a competing local player automatically.
+
+## Isolated automated device checks
+
+Build with `-I scripts/feedback-check.init.gradle :app:assembleSideloadDebug
+:app:assembleSideloadDebugAndroidTest`. This creates the separate
+`com.example.greenstreem.feedbackcheck` package. The UI suite refuses to run
+against a customer's normal app package.
+
+Install both APKs, then run `am instrument -w -e guideUi true
+com.example.greenstreem.feedbackcheck.test/com.example.greenstreem.RecordingLifecycleTest`.
+The fixture checks actual touch scrolling and rendered header pixels, cursor
+position, quick-panel refresh completion, consecutive movie seeks and Subtitles
+focus, remote short/held Back, and fresh cast relay loads on channel selection.
+Add `-e nativeCastTarget TV_IP` to use an actual Google Cast receiver instead of
+the local DLNA test fixture. Keep that receiver available for this explicit test.
+Test video/audio are generated synthetic patterns and are in androidTest only.

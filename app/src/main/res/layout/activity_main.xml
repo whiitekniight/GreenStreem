@@ -327,11 +327,19 @@
                     android:clipToPadding="false"
                     android:orientation="vertical">
 
-                    <!-- Time Ruler Header -->
+                    <!-- Keep clock and time labels in one fixed, clipped layer above scrolling rows. -->
+                    <FrameLayout
+                        android:id="@+id/guideHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="24dp"
+                        android:elevation="24dp"
+                        android:background="#0A0A0A"
+                        android:clipChildren="true"
+                        android:clipToPadding="true">
                     <HorizontalScrollView
                         android:id="@+id/hsvTimeRuler"
                         android:layout_width="match_parent"
-                        android:layout_height="24dp"
+                        android:layout_height="match_parent"
                         android:background="#0A0A0A"
                         android:scrollbars="none"
                         android:overScrollMode="never">
@@ -344,6 +352,24 @@
                             android:orientation="horizontal"
                             android:paddingStart="0dp" />
                     </HorizontalScrollView>
+                <TextView
+                    android:id="@+id/tvGuideClock"
+                    android:layout_width="220dp"
+                    android:layout_height="24dp"
+                    android:layout_gravity="top|start"
+                    android:background="#0A0A0A"
+                    android:ellipsize="end"
+                    android:gravity="center_vertical"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="8dp"
+                    android:textColor="#7EC8FF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    tools:text="Sat, Oct 7, 5:32 PM" />
+                    </FrameLayout>
 
                     <TextView
                         android:id="@+id/tvLibraryCategoryCount"
@@ -405,23 +431,6 @@
                     android:background="#A8D8FF"
                     android:visibility="gone" />
 
-                <TextView
-                    android:id="@+id/tvGuideClock"
-                    android:layout_width="220dp"
-                    android:layout_height="24dp"
-                    android:layout_gravity="top|start"
-                    android:background="@android:color/transparent"
-                    android:ellipsize="end"
-                    android:gravity="center_vertical"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="8dp"
-                    android:textColor="#7EC8FF"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    tools:text="Sat, Oct 7, 5:32 PM" />
             </FrameLayout>
         </LinearLayout>
 

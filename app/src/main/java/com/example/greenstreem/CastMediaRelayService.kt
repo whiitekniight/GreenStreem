@@ -29,8 +29,9 @@ class CastMediaRelayService: Service() {
             if(Build.VERSION.SDK_INT>=26)c.startForegroundService(intent) else c.startService(intent)
         }
         internal fun liveUrl(hls: Boolean): String? {
+            if(port==0 || liveKey!=key)return null
             live?.failure?.let { error(it) }
-            if(port==0 || liveKey!=key || live?.ready()!=true)return null
+            if(live?.ready()!=true)return null
             return "http://${CastSupport.localAddress()}:$port/$key/"+if(hls) "index.m3u8" else "stream.ts"
         }
         internal fun url(): String {

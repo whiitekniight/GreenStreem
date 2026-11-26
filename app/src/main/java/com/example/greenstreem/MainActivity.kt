@@ -132,6 +132,7 @@ class MainActivity : FragmentActivity() {
     private lateinit var btnNextEpisodeStart: TextView
     private lateinit var btnNextEpisodeAuto: TextView
     private lateinit var timeRulerContainer: LinearLayout
+    private lateinit var guideHeader: View
     private lateinit var tvGuideClock: TextView
     private var topInfoDefaultHeightPx = 0
     private var categoryDefaultWidthPx = 0
@@ -522,6 +523,7 @@ class MainActivity : FragmentActivity() {
         hsvTimeRuler = findViewById(R.id.hsvTimeRuler) ?: return
         rightPanel = findViewById(R.id.rightPanel) ?: return
         timeRulerContainer = findViewById(R.id.timeRulerContainer) ?: return
+        guideHeader = findViewById(R.id.guideHeader) ?: return
         tvGuideClock = findViewById(R.id.tvGuideClock) ?: return
         nowTimeLine = findViewById(R.id.nowTimeLine) ?: return
         tvProgramTitleLarge = findViewById(R.id.tvProgramTitleLarge) ?: return
@@ -656,10 +658,12 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        player?.play()
+        if(!tvCasting.isCasting) player?.play()
     }
 
     override fun onPause() {
+        remoteBackHandler.removeCallbacks(remoteBackExit)
+        remoteBackHeld = false
         if (suppressExitOnUserLeaveHint) {
             muteForInternalActivity()
         }
@@ -946,7 +950,8 @@ class MainActivity : FragmentActivity() {
             "Video quality",
             "Audio tracks",
             "Subtitle tracks",
-            "Sleep timer"
+            "Sleep timer",
+            "Update EPG now"
         )
         val visibility = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
         val visibleIndices = options.indices.filter { visibility.getBoolean("dashboard_quick_$it", true) }
@@ -965,9 +970,30 @@ class MainActivity : FragmentActivity() {
                     4 -> showAudioTrackDialog()
                     5 -> showSubtitleTrackDialog()
                     6 -> showSleepTimerDialog()
+                    7 -> updateEpgNow()
                 }
             }
             .show()
+    }
+
+    private fun updateEpgNow() {
+        if (!ProFeatureGate.isUnlocked(this)) {
+            ProFeatureGate.showUnlockPrompt(this, "EPG updates are available in GreenStreem Pro.")
+            return
+        }
+        if (currentMode != ContentMode.LIVE_TV) {
+            Toast.makeText(this, "Open Live TV to update the guide", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_EPG_UPDATE_IN_PROGRESS, false)) {
+            Toast.makeText(this, "EPG update is already running", Toast.LENGTH_SHORT).show()
+            return
+        }
+        prefs.edit().putBoolean(KEY_EPG_FORCE_REFRESH_NOW, true).apply()
+        pendingEpgRefreshUserRequested = true
+        handleEpgSettingsInvalidation(prefs, forceRefreshRequested = true)
+        Toast.makeText(this, "Updating EPG…", Toast.LENGTH_SHORT).show()
     }
 
     private fun guideDaysAhead(): Int = EpgGuideRange.daysForIndex(
@@ -1783,15 +1809,19 @@ class MainActivity : FragmentActivity() {
             .show()
     }
 
+    private fun currentCastingMedia(): CastSupport.Media? {
+        val url=currentVodUrl ?: currentLivePlaybackUrl
+        return url?.let { CastSupport.Media(it,currentVodTitle ?: currentChannel?.name ?: "GreenStreem",currentVodUrl==null,
+                if(currentVodUrl==null) 0 else CastSupport.position(player),
+                IPTV_PLAYER_HEADERS + ("User-Agent" to IPTV_PLAYER_USER_AGENT),
+                googleUrl=if(currentVodUrl==null) CastMediaUrls.googleLive(it,currentLivePlaybackUrls) else null) }
+    }
+
     private fun setupMovieControls() {
         findViewById<View>(R.id.btnMovieCast)?.let(CastSupport::safeButtonPlacement)
         findViewById<View>(R.id.btnMovieCast)?.setOnClickListener {
             keepMovieControlsVisible()
-            val url=currentVodUrl ?: currentLivePlaybackUrl
-            val media=url?.let { CastSupport.Media(it,currentVodTitle ?: currentChannel?.name ?: "GreenStreem",currentVodUrl==null,
-                if(currentVodUrl==null) 0 else CastSupport.position(player),
-                IPTV_PLAYER_HEADERS + ("User-Agent" to IPTV_PLAYER_USER_AGENT),
-                googleUrl=if(currentVodUrl==null) CastMediaUrls.googleLive(it,currentLivePlaybackUrls) else null) }
+            val media=currentCastingMedia()
             tvCasting.open(media) { player?.pause() }
         }
         btnMoviePlayPause.setOnClickListener {
@@ -2121,6 +2151,7 @@ class MainActivity : FragmentActivity() {
             currentPlayer.pause()
             showMovieControls(focusControls = false)
         } else {
+            if(currentPlayer.playbackState==Player.STATE_IDLE && currentLivePlaybackUrl!=null) currentPlayer.prepare()
             currentPlayer.play()
             hideMovieControls()
         }
@@ -2308,7 +2339,7 @@ class MainActivity : FragmentActivity() {
         if (!::tvGuideClock.isInitialized) return
         val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
         val shouldShow = currentMode == ContentMode.LIVE_TV &&
-            (currentState == UiState.EPG_GRID || currentState == UiState.CATEGORIES) &&
+            currentState != UiState.FULL_SCREEN &&
             prefs.getBoolean(KEY_SHOW_CLOCK, true)
         if (!shouldShow) {
             tvGuideClock.visibility = View.GONE
@@ -2666,6 +2697,7 @@ class MainActivity : FragmentActivity() {
             rvCategories.paddingRight,
             rvCategories.paddingBottom
         )
+        guideHeader.visibility = if (libraryMode) View.GONE else View.VISIBLE
         hsvTimeRuler.visibility = if (libraryMode) View.GONE else View.VISIBLE
         nowTimeLine.visibility = if (libraryMode) View.GONE else nowTimeLine.visibility
         if (!libraryMode) {
@@ -5383,10 +5415,17 @@ class MainActivity : FragmentActivity() {
         resetLivePlaybackWatchdog()
         Log.i(TAG, "starting live channel=$title ${livePlaybackDebugSummary(uniqueUrls.first())} alternates=${uniqueUrls.drop(1).joinToString { livePlaybackDebugSummary(it) }}")
         try {
+            if(tvCasting.isCasting) player?.stop()
             resetAudioSelectionForNewMedia()
             player?.setMediaItem(createLiveMediaItem(uniqueUrls.first()))
-            player?.prepare()
-            player?.play()
+            if(tvCasting.isCasting && currentCastingMedia()?.let { media ->
+                tvCasting.replaceMedia(media) { player?.pause() }
+            } == true) {
+                player?.pause()
+            } else {
+                player?.prepare()
+                player?.play()
+            }
             targetState?.let { updateUiState(it) }
         } catch (e: Exception) {
             Log.w(TAG, "failed to start live media url=${safePlaybackUrl(uniqueUrls.first())}", e)
@@ -5823,7 +5862,46 @@ class MainActivity : FragmentActivity() {
         newContainer.addView(playerView)
     }
 
+    private val remoteBackHandler = Handler(Looper.getMainLooper())
+    private var remoteBackHeld = false
+    private var remoteBackExited = false
+    private val remoteBackExit = Runnable {
+        if (remoteBackHeld && !remoteBackExited && !isFinishing) {
+            remoteBackExited = true
+            // Exit viewing without stopping independent scheduled-recording services.
+            runCatching {
+                startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.onFailure { moveTaskToBack(true) }
+            finishAffinity()
+        }
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (isTvUiMode() && event.keyCode == KeyEvent.KEYCODE_BACK) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (event.repeatCount == 0) {
+                        remoteBackHeld = true
+                        remoteBackExited = false
+                        remoteBackHandler.postDelayed(remoteBackExit,
+                            android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                    } else if(event.isLongPress) remoteBackExit.run()
+                    return true
+                }
+                KeyEvent.ACTION_UP -> {
+                    remoteBackHandler.removeCallbacks(remoteBackExit)
+                    val shortPress = remoteBackHeld && !remoteBackExited && !event.isCanceled
+                    remoteBackHeld = false
+                    if (shortPress) {
+                        if (movieControlsBar.visibility == View.VISIBLE) hideMovieControls()
+                        else onBackPressedDispatcher.onBackPressed()
+                    }
+                    return true
+                }
+            }
+        }
+
         if (handleNextEpisodePromptKey(event)) return true
         // The progress-only seek overlay allows repeated skips. The expanded
         // button row instead owns DPAD navigation (audio, subtitles, etc.).

@@ -1,0 +1,6 @@
+// Separate test install: never replace a customer's playlist/settings during QA.
+allprojects {
+    plugins.withId('com.android.application') {
+        android.buildTypes.debug.applicationIdSuffix = '.feedbackcheck'
+    }
+}

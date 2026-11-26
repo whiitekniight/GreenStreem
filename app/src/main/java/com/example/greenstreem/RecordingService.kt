@@ -4,7 +4,6 @@ import android.app.*
 import android.content.Intent
 import android.os.*
 import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -51,20 +50,21 @@ class RecordingService : Service() {
             val p = getSharedPreferences(DownloadPrefs.PREFS_NAME,0)
             val user = p.getString(DownloadPrefs.KEY_SMB_USERNAME,"").orEmpty()
             val pass = p.getString(DownloadPrefs.KEY_SMB_PASSWORD,"").orEmpty()
-            val conn = (URL(job.url).openConnection() as HttpURLConnection).apply { connectTimeout=15000; readTimeout=15000 }
-            connection=conn
-            require(conn.responseCode in 200..299) { "Provider refused stream (${conn.responseCode})" }
-            conn.inputStream.buffered().use { input ->
-                // Never save an HLS playlist or an error page as a recording.
-                input.mark(1024)
-                val prefix=ByteArray(564)
-                var count=0
-                while(count<prefix.size) { val n=input.read(prefix,count,prefix.size-count); if(n<0) break; count+=n }
-                input.reset()
-                require(count>=376 && (0 until 188).any { prefix[it]==0x47.toByte() && prefix[it+188]==0x47.toByte() }) {
-                    "This channel does not provide a supported MPEG-TS recording stream"
-                }
-                val destination = if(RecordingLocalFolders.direct(job.treeUri)) {
+            var updated=0L
+            bytes=RecordingStream.copy(
+                originalUrl=job.url,
+                deadlineMs=deadline,
+                cancelled={ stopped.get() },
+                onConnection={ connection=it },
+                onProgress={ total ->
+                    bytes=total
+                    if(System.currentTimeMillis()-updated>5000) {
+                        RecordingSchedule.save(this,job.copy(state="Recording",bytes=bytes))
+                        updated=System.currentTimeMillis()
+                    }
+                },
+                openOutput={
+                    if(RecordingLocalFolders.direct(job.treeUri)) {
                     val file=RecordingLocalPaths.child(RecordingLocalFolders.directory(this,job.treeUri),job.file)
                     check(file.createNewFile()) { "A recording with this name already exists" }
                     job=job.copy(outputUri=android.net.Uri.fromFile(file).toString())
@@ -79,21 +79,8 @@ class RecordingService : Service() {
                     RecordingSchedule.save(this,job.copy(state="Recording"))
                     contentResolver.openOutputStream(document,"w") ?: throw java.io.IOException("Cannot write recording")
                 } else SmbBrowser.openRecordingOutput(job.server,user,pass,job.share,job.folder,job.file)
-                destination.use { output ->
-                    val buffer=ByteArray(64*1024)
-                    var updated=0L
-                    while(!stopped.get() && System.currentTimeMillis()<deadline) {
-                        val n=try { input.read(buffer) } catch(e: java.io.IOException) {
-                            if(System.currentTimeMillis()>=deadline || stopped.get()) break else throw e
-                        }
-                        if(n<0) throw java.io.IOException("Stream ended before the program finished")
-                        output.write(buffer,0,n); bytes+=n
-                        if(System.currentTimeMillis()-updated>5000) {
-                            RecordingSchedule.save(this,job.copy(state="Recording",bytes=bytes)); updated=System.currentTimeMillis()
-                        }
-                    }
                 }
-            }
+            )
             finish(job,bytes,null)
         } catch(e: Exception) { finish(job,bytes,e) }
         finally { timer.shutdownNow(); connection?.disconnect(); connection=null; if(wake.isHeld) wake.release(); active=null; activeJobId=null; stopForeground(true); stopSelf() }
