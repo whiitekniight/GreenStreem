@@ -120,12 +120,14 @@ class ManageGroupsActivity : AppCompatActivity() {
 
     private fun toggleGroup(category: XtreamCategory, isVisible: Boolean) {
         lifecycleScope.launch {
-            if (isVisible) {
-                db.groupDao().showGroup(HiddenGroup(category.id, category.name))
-            } else {
-                db.groupDao().hideGroup(HiddenGroup(category.id, category.name))
+            runCatching {
+                if (isVisible) db.groupDao().showGroup(HiddenGroup(category.id, category.name))
+                else db.groupDao().hideGroup(HiddenGroup(category.id, category.name))
+                markGroupsChanged()
+            }.onFailure {
+                android.widget.Toast.makeText(this@ManageGroupsActivity,"Could not save group visibility. Please try again.",android.widget.Toast.LENGTH_LONG).show()
+                refreshList()
             }
-            markGroupsChanged()
         }
     }
 
@@ -138,10 +140,11 @@ class ManageGroupsActivity : AppCompatActivity() {
 
     private class GroupToggleAdapter(
         private val items: List<XtreamCategory>,
-        private val hiddenIds: Set<String>,
+        hiddenIds: Set<String>,
         private val onToggle: (XtreamCategory, Boolean) -> Unit,
         private val onFocused: (Int) -> Unit
     ) : RecyclerView.Adapter<GroupToggleAdapter.ViewHolder>() {
+        private val hiddenIds = hiddenIds.toMutableSet()
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val tvName: TextView = view.findViewById(R.id.tvGroupName)
@@ -176,6 +179,7 @@ class ManageGroupsActivity : AppCompatActivity() {
                 holder.swVisible.isChecked = newState
             }
             holder.swVisible.setOnCheckedChangeListener { _: CompoundButton, isChecked: Boolean ->
+                if (isChecked) hiddenIds.remove(item.id) else hiddenIds.add(item.id)
                 onToggle(item, isChecked)
             }
         }

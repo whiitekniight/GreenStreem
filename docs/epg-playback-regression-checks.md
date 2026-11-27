@@ -97,3 +97,22 @@ focus, remote short/held Back, and fresh cast relay loads on channel selection.
 Add `-e nativeCastTarget TV_IP` to use an actual Google Cast receiver instead of
 the local DLNA test fixture. Keep that receiver available for this explicit test.
 Test video/audio are generated synthetic patterns and are in androidTest only.
+
+## Priority customer feedback — 2026-11-27
+
+Candidate Android 1.9.72 (108): group switches keep their latest value when rows
+are recycled; the main navigation rail scrolls so Settings remains reachable.
+The isolated priorityUi suite passed on Samsung tablet R5GL65VKQ4K and the TV
+emulator, checking persisted group choices, recycled rows, touch scrolling and
+DPAD activation of Settings in a 220dp viewport. The complete guideUi suite
+passed on the awake TV emulator, including header/cursor, cast retuning, movie
+seeking, subtitle navigation and held Back to Home. An initial run failed the final Back assertion; after explicitly waking the
+emulator, the full rerun passed without an app change.
+
+Windows Recorder candidate 0.1.2 catches truncated HTTP streams and retries the
+original provider URL until scheduled end or cancellation, while storage failures
+remain terminal. Eleven unit tests passed. A real 365-second run disconnected its
+client, broke the source after 300 seconds, renewed through the original URL and
+completed at its deadline (10,642,304 bytes). Reconnection detail warns that an
+outage can leave a gap. This demonstrates recovery, not the customer's exact
+provider failure. Public downloads have not been changed for these candidates.

@@ -4,14 +4,16 @@ package com.example.greenstreem
 class RecordingLifecycleTest : android.app.Instrumentation() {
     private var nativeCastTarget: String?=null
     private var guideUi=false
+    private var priorityUi=false
     private var permissionUi=false
     private var storageProbe=false
     private var fallbackUi=false
-    override fun onCreate(arguments: android.os.Bundle?) { guideUi=arguments?.getString("guideUi")=="true"; nativeCastTarget=arguments?.getString("nativeCastTarget"); permissionUi=arguments?.getString("permissionUi")=="true";storageProbe=arguments?.getString("storageProbe")=="true";fallbackUi=arguments?.getString("fallbackUi")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments: android.os.Bundle?) { priorityUi=arguments?.getString("priorityUi")=="true";guideUi=arguments?.getString("guideUi")=="true"; nativeCastTarget=arguments?.getString("nativeCastTarget"); permissionUi=arguments?.getString("permissionUi")=="true";storageProbe=arguments?.getString("storageProbe")=="true";fallbackUi=arguments?.getString("fallbackUi")=="true"; super.onCreate(arguments); start() }
     override fun onStart() {
         val result=android.os.Bundle()
         try {
-            if(guideUi) { GuideFeedbackChecks(this,nativeCastTarget).run() }
+            if(priorityUi) { PriorityFeedbackChecks(this).run() }
+            else if(guideUi) { GuideFeedbackChecks(this,nativeCastTarget).run() }
             else if(storageProbe) {
                 val targets=RecordingLocalFolders.available(targetContext)
                 check(targets.any { it.removable }) { "No app-accessible USB storage found" }
@@ -20,7 +22,7 @@ class RecordingLifecycleTest : android.app.Instrumentation() {
             } else if(fallbackUi) testMissingPickerFallback()
             else if(permissionUi) testPermissionGuidance()
             else { testScheduledJobSurvivesBackgroundAndReportsStreamFailure();testDirectStorageRecording() }
-            result.putString("stream",if(guideUi) "PASS: tablet header / fixed cursor / refresh / cast retune / remote Back assertions" else "PASS: recording lifecycle / local storage assertions");finish(-1,result)
+            result.putString("stream",if(priorityUi) "PASS: group recycling / persistence / touch and remote Settings access" else if(guideUi) "PASS: tablet header / fixed cursor / refresh / cast retune / remote Back assertions" else "PASS: recording lifecycle / local storage assertions");finish(-1,result)
         }
         catch(e: Throwable) { result.putString("stream","FAIL: ${e}\n${android.util.Log.getStackTraceString(e)}"); finish(0,result) }
     }
