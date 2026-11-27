@@ -1,4 +1,4 @@
-# Recording improvements — candidate 1.9.73 / recorder 0.2.0
+# Recording improvements — 1.9.73 / recorder 0.2.0
 
 Hold a guide program to choose Record now, Schedule recording, Stop/cancel a
 matching recording, Recordings, or Channel options. Recording now starts at the
@@ -30,7 +30,7 @@ remain running and connected. Android may be off only after the computer confirm
 the schedule. Linux automatic sleep must be disabled by the user. HLS-only
 recording remains unsupported. This does not introduce a hosted recording service.
 
-Public download files and store submissions are not changed by this candidate.
+Customer downloads and the in-app updater were published on November 27, 2026. Google Play submissions are a separate release lane.
 
 ## Validation
 
@@ -49,8 +49,8 @@ launcher syntax and credential-file permissions were also checked.
 
 The signed branded 1.9.73 APK was installed on the Samsung tablet with existing
 user data preserved. Its installed APK SHA-256 matches the release artifact:
-`e9f184f97f51bec91921b7446501bbd819bc7e9270671fcac01892e88854f337`.
-Public customer downloads and Play submissions have not been updated.
+`0bd2c3d42a072f4879afe8073a3ab5ae196b222c4c248e73fe5343288fa444c9`.
+Customer downloads are live; see customer-release-1.9.73.md for published artifact verification.
 
 The priorityUi regression passed on the tablet (actual touch scrolling/tapping)
 and TV emulator (DPAD traversal), including group-row recycling/persistence and
