@@ -993,7 +993,7 @@ class MainActivity : FragmentActivity() {
         prefs.edit().putBoolean(KEY_EPG_FORCE_REFRESH_NOW, true).apply()
         pendingEpgRefreshUserRequested = true
         handleEpgSettingsInvalidation(prefs, forceRefreshRequested = true)
-        Toast.makeText(this, "Updating EPG…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Updating EPG...", Toast.LENGTH_SHORT).show()
     }
 
     private fun guideDaysAhead(): Int = EpgGuideRange.daysForIndex(
@@ -2679,14 +2679,13 @@ class MainActivity : FragmentActivity() {
                 topMargin = gridViewportTop
             }
         }
-        // Movies/Series use a true lower viewport like TiviMate. Both parents
-        // must clip at the padded content edge or recycled poster rows can draw
-        // upward through the backdrop/details header while scrolling.
+        // Clip every content mode to its viewport so recycled rows cannot draw
+        // above the guide ruler or through the backdrop/details header.
         (rightPanel as? ViewGroup)?.apply {
-            clipChildren = libraryMode
-            clipToPadding = libraryMode
+            clipChildren = true
+            clipToPadding = true
         }
-        (mainContentArea as? ViewGroup)?.clipChildren = libraryMode
+        (mainContentArea as? ViewGroup)?.clipChildren = true
         rvCategories.setPadding(
             rvCategories.paddingLeft,
             when {
@@ -6677,7 +6676,7 @@ class MainActivity : FragmentActivity() {
         // Keep scrolled poster rows inside the grid so they cannot cover the
         // backdrop/details header. The smaller focus zoom fits inside row spacing.
         rvContent.clipChildren = true
-        rvContent.clipToPadding = false
+        rvContent.clipToPadding = currentMode == ContentMode.LIVE_TV
         val currentLayout = rvContent.layoutManager
         val layoutMatches = if (shouldUseGrid) {
             currentLayout is GridLayoutManager

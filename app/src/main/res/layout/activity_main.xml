@@ -323,8 +323,8 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:clipChildren="false"
-                    android:clipToPadding="false"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
                     android:orientation="vertical">
 
                     <!-- Keep clock and time labels in one fixed, clipped layer above scrolling rows. -->
