@@ -1,6 +1,6 @@
 {
-  "versionCode": 107,
-  "versionName": "1.9.71",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/8b7357286f5b74b3ecabadbd43cf83c4a35d306b/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "Adds Windows PC recorder support: schedule from the app, then let your PC record to its local, USB or NAS folder while this device is off. Download the Windows recorder preview at greenstreemlabs.com. Includes short setup instructions, PC recording status and replay, a fixed guide clock/time header with clean scrolling edges, Update EPG now in the quick panel, held Back to TV Home, connected-TV channel retuning, and reconnect recovery for interrupted device recordings. One PC recording at a time; PC must stay on, signed in and running the recorder."
+  "versionCode": 109,
+  "versionName": "1.9.73",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/18749e8df2307e563f59dd203c3445b14c01e593/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "Adds weekly recording schedules, adjustable start/end padding, guide Record now and Stop/cancel actions, red recording dots, and a combined computer/device recordings list with automatic refresh. Includes visible Back buttons, group-switch persistence and a scrollable Settings menu. Recorder preview 0.2.0 is available for Windows and Linux at greenstreemlabs.com, with improved recovery from interrupted provider streams. Keep the recorder computer running; this device can be off after schedule confirmation. One MPEG-TS recording at a time."
 }

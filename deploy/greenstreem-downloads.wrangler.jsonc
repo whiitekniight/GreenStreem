@@ -1,0 +1,24 @@
+{
+  "name": "greenstreem-downloads",
+  "account_id": "404ac2e47990d26e4a7623872cbf74ec",
+  "compatibility_date": "2026-11-23",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "../greenstreem-site"
+  },
+  "routes": [
+    {
+      "pattern": "greenstreemlabs.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.greenstreemlabs.com",
+      "custom_domain": true
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
