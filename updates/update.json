@@ -1,6 +1,6 @@
 {
-  "versionCode": 104,
-  "versionName": "1.9.68",
-  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/742f2359508a412381cd5afbeccf885ca647bff3/greenstreem-site/downloads/greenstreem-customer.apk",
-  "notes": "New Cast button for live TV and compatible videos on supported Google Cast and DLNA TVs. Improved live-stream audio and video timing compatibility, tested on Samsung TV and NVIDIA Shield. Casting starts without a controls popup; tap the phone video for Play/pause, Stop casting, and Change TV. No pairing or extra receiver app on supported TVs. Keep the phone/tablet on Wi-Fi while it relays a stream. Includes clearer outlined buttons and spacing. Includes an automatic built-in local/USB recording-storage chooser for Fire TV devices without a folder picker."
+  "versionCode": 107,
+  "versionName": "1.9.71",
+  "apkUrl": "https://raw.githubusercontent.com/whiitekniight/GreenStreem/8b7357286f5b74b3ecabadbd43cf83c4a35d306b/greenstreem-site/downloads/greenstreem-customer.apk",
+  "notes": "Adds Windows PC recorder support: schedule from the app, then let your PC record to its local, USB or NAS folder while this device is off. Download the Windows recorder preview at greenstreemlabs.com. Includes short setup instructions, PC recording status and replay, a fixed guide clock/time header with clean scrolling edges, Update EPG now in the quick panel, held Back to TV Home, connected-TV channel retuning, and reconnect recovery for interrupted device recordings. One PC recording at a time; PC must stay on, signed in and running the recorder."
 }
