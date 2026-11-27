@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GreenStreem Labs</title>
+  <!-- deploy-check: 2026-06-06 -->
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08110d;
+      --panel: #101c16;
+      --text: #f3fff8;
+      --muted: #a8b7ae;
+      --green: #28d86b;
+      --green-dark: #129447;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
+      background: radial-gradient(circle at top, #143625 0, var(--bg) 46%);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 32px 18px;
+    }
+
+    main {
+      width: min(720px, 100%);
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid rgba(40, 216, 107, .28);
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, .35);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      letter-spacing: 0;
+    }
+
+    p {
+      color: var(--muted);
+      line-height: 1.55;
+      margin: 0 0 22px;
+      font-size: 1rem;
+    }
+
+    .download {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 22px;
+      border-radius: 8px;
+      background: linear-gradient(180deg, var(--green), var(--green-dark));
+      color: #041008;
+      font-weight: 700;
+      text-decoration: none;
+      margin: 8px 0 24px;
+    }
+
+    .note {
+      border-top: 1px solid rgba(255, 255, 255, .1);
+      padding-top: 18px;
+      margin-top: 8px;
+      font-size: .95rem;
+    }
+
+    li { color: var(--muted); line-height: 1.6; margin-bottom: 10px; }
+
+    .support {
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>GreenStreem Labs</h1>
+    <p>GreenStreem customer app download for Android TV and compatible Android devices.</p>
+    <a class="download" href="https://raw.githubusercontent.com/whiitekniight/GreenStreem/8b7357286f5b74b3ecabadbd43cf83c4a35d306b/greenstreem-site/downloads/greenstreem-customer.apk">Download GreenStreem APK</a>
+    <p>Version 1.9.71: Schedule recordings on your Windows PC and replay them in the app. Also includes a fixed guide clock/time bar, clean scrolling edges, quick EPG refresh, held Back to TV Home, casting channel changes, and recording reconnect recovery.</p>
+    <p class="note">After downloading, open the APK on your device and allow install from unknown sources if prompted.</p>
+    <section id="windows-recorder" class="note" aria-labelledby="recorder-title">
+      <h2 id="recorder-title">GreenStreem Recorder for Windows</h2>
+      <p>Preview 0.1.0 &middot; Record on your own PC while your phone, tablet or TV device is off. Save to an existing local, USB or NAS folder that Windows can access.</p>
+      <a class="download" href="/downloads/greenstreem-recorder-windows.zip" download>Download Windows Recorder ZIP</a>
+      <ol>
+        <li>Extract the entire ZIP to a folder on your Windows PC. Open <strong>GreenStreem Recorder.exe</strong> from that folder.</li>
+        <li>Choose your recording folder. For a NAS, open its shared folder in File Explorer and sign in first.</li>
+        <li>In Android app 1.9.71 or newer, open <strong>Recordings &rarr; Set up PC recorder &rarr; Find my PC recorder</strong>.</li>
+        <li>Click <strong>Connect a device</strong> on the PC and enter its code in the app.</li>
+        <li>Schedule a guide program. Wait for <strong>PC confirmed the schedule</strong> before turning off your tablet or TV device.</li>
+      </ol>
+      <p>Keep the PC on and signed in, the recorder running, and its storage connected. Minimize the recorder to keep it running. Preview supports one MPEG-TS recording at a time on your home network. Existing device recording remains available. Setup notes are included in the ZIP.</p>
+    </section>
+    <p class="support">Support: support@greenstreemlabs.com</p>
+  </main>
+</body>
+</html>
+
+
