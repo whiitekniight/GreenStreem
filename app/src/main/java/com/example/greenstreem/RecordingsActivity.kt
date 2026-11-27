@@ -63,11 +63,11 @@ class RecordingsActivity : AppCompatActivity() {
         val prefs=getSharedPreferences(DownloadPrefs.PREFS_NAME,0)
         val tree=prefs.getString("recording_tree_uri", "").orEmpty()
         root.addView(TextView(this).apply {
-            text=if(tree.isBlank()) "Saving to: Network folder" else if(RecordingLocalFolders.direct(tree)) "Saving to: ${RecordingLocalFolders.label(this@RecordingsActivity,tree)}" else "Saving to: Local / USB folder"
+            text=if(PcRecorder.enabled(this@RecordingsActivity)) "New schedules record on your PC. Device recordings are listed below." else if(tree.isBlank()) "Saving to: Network folder" else if(RecordingLocalFolders.direct(tree)) "Saving to: ${RecordingLocalFolders.label(this@RecordingsActivity,tree)}" else "Saving to: Local / USB folder"
             setTextColor(android.graphics.Color.LTGRAY); textSize=16f; setPadding(0,6,0,18)
         })
-        if(!RecordingSchedule.alarmAllowed(this)) root.addView(TextView(this).apply {
-            text="Scheduling needs permission - tap to enable Alarms & reminders"
+        if(!PcRecorder.enabled(this) && !RecordingSchedule.alarmAllowed(this)) root.addView(TextView(this).apply {
+            text="Scheduling needs permission for device recording - tap to enable Alarms & reminders. PC recordings do not need this permission."
             textSize=15f; setTextColor(android.graphics.Color.WHITE); setPadding(16,12,16,12)
             background=AppearanceTheme.buttonBackground(this@RecordingsActivity)
             isFocusable=true; isClickable=true
@@ -118,6 +118,12 @@ class RecordingsActivity : AppCompatActivity() {
             backgroundTintList=null; background=AppearanceTheme.buttonBackground(this@RecordingsActivity)
             setOnClickListener { startActivity(Intent(this@RecordingsActivity,SharedRecordingsActivity::class.java)) }
         })
+        if(selectedRecordingIds.isEmpty()) root.addView(Button(this).apply {
+            text=if(PcRecorder.enabled(this@RecordingsActivity)) "PC recorder · schedules and replay" else "Set up PC recorder · record while this device is off"
+            isAllCaps=false;setTextColor(android.graphics.Color.WHITE);backgroundTintList=null
+            background=AppearanceTheme.buttonBackground(this@RecordingsActivity)
+            setOnClickListener { startActivity(Intent(this@RecordingsActivity,PcRecorderActivity::class.java)) }
+        },LinearLayout.LayoutParams(-1,-2).apply { topMargin=(8*resources.displayMetrics.density).toInt();bottomMargin=(12*resources.displayMetrics.density).toInt() })
         val list=ListView(this)
         list.adapter=object: ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,jobs.map {
             (if(it.id in selectedRecordingIds) "Selected: " else "") + "${it.title} • ${it.channel}\n${DateFormat.getDateTimeInstance().format(Date(it.start))} • ${it.state}\n${it.detail}"

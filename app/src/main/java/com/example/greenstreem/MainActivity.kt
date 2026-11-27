@@ -877,6 +877,10 @@ class MainActivity : FragmentActivity() {
                     2 -> showChannelOptions(channel)
                     else -> {
                         if(listing == null) { Toast.makeText(this, "Hold OK on a program with guide times", Toast.LENGTH_LONG).show(); return@setItems }
+                        if(PcRecorder.enabled(this)) {
+                            showPcRecordingOptions(channel,listing)
+                            return@setItems
+                        }
                         if(!RecordingSchedule.alarmAllowed(this)) {
                             AlertDialog.Builder(this)
                                 .setTitle("Allow scheduled recordings")
@@ -916,6 +920,25 @@ class MainActivity : FragmentActivity() {
                     }
                 }
             }.show()
+    }
+
+    private fun showPcRecordingOptions(channel: Channel, listing: XtreamEpgListing) {
+        val title=DataUtils.decodeBase64(listing.title)
+        fun schedule(test: Boolean) {
+            val url=if(isM3uPlaylist()) channel.streamUrl else buildLiveStreamUrl(channel.id,LIVE_STREAM_FORMAT_TS)
+            val start=if(test) System.currentTimeMillis()+10000L else listing.startTimestamp*1000
+            val end=if(test) start+30000L else listing.stopTimestamp*1000
+            lifecycleScope.launch {
+                runCatching { PcRecorder.schedule(this@MainActivity,if(test) "Test - $title" else title,channel.name,url,start,end) }
+                    .onSuccess { Toast.makeText(this@MainActivity,"PC confirmed the schedule. This device can now be off.",Toast.LENGTH_LONG).show() }
+                    .onFailure { Toast.makeText(this@MainActivity,"Could not confirm the schedule. Check PC Recordings before trying again. ${it.message.orEmpty()}",Toast.LENGTH_LONG).show() }
+            }
+        }
+        AlertDialog.Builder(this).setTitle("Record $title on PC?")
+            .setMessage("The PC saves to its selected recording folder. Keep the PC on, signed in, the recorder running and its drive connected. This device can be off after confirmation. A recording uses one provider connection.")
+            .setPositiveButton("Schedule") { _,_ -> schedule(false) }
+            .setNeutralButton("30-second test") { _,_ -> schedule(true) }
+            .setNegativeButton("Cancel",null).show()
     }
 
     private fun showChannelOptions(channel: Channel) {
