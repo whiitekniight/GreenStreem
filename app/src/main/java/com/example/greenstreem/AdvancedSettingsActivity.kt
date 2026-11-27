@@ -32,6 +32,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_playlist_settings)
+        ScreenBack.install(this)
 
         prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
         PlayBillingManager.start(this)

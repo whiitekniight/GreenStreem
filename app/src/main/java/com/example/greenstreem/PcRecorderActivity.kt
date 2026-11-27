@@ -33,8 +33,8 @@ class PcRecorderActivity: AppCompatActivity() {
     private fun home() {
         val current=++generation
         root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(24,20,24,20);setBackgroundColor(0xff101820.toInt()) }
-        setContentView(ScrollView(this).apply { addView(root) })
-        text("PC recorder",26f)
+        setContentView(ScrollView(this).apply { addView(root) });ScreenBack.install(this)
+        text("Recorder computer",26f)
         text("Your PC records to its chosen local, USB or NAS folder. Keep the PC on, signed in and GreenStreem Recorder running. This device can be off after the PC confirms your schedule.")
         if(!PcRecorder.connected(this)) {
             button("Find my PC recorder") {
@@ -86,12 +86,12 @@ class PcRecorderActivity: AppCompatActivity() {
         } };dialog.show()
     }
     private fun actions(job: JSONObject) {
-        val active=job.getString("state") in listOf("Scheduled","Recording")
+        val active=job.getString("state") in listOf("Scheduled","Recording") || job.optInt("weekly")==1
         val choices=if(active) arrayOf("Stop / cancel recording") else if(job.optLong("bytes")>0) arrayOf("Play recording","Delete recording") else arrayOf("Delete recording")
         AlertDialog.Builder(this).setTitle(job.getString("title")).setMessage(job.optString("detail").takeIf { it.isNotBlank() }).setItems(choices) { _,index ->
             when(choices[index]) {
                 "Play recording" -> play(job)
-                else -> AlertDialog.Builder(this).setTitle(choices[index]+"?").setMessage(if(active) "The PC will stop this schedule." else "This permanently deletes the saved file from the PC's recording folder.")
+                else -> AlertDialog.Builder(this).setTitle(choices[index]+"?").setMessage(if(active) "The recorder will stop this schedule and its weekly repeats." else "This permanently deletes the saved file from the PC's recording folder.")
                     .setNegativeButton("Keep",null).setPositiveButton("Confirm") { _,_ -> lifecycleScope.launch {
                         runCatching { if(active) PcRecorder.cancel(this@PcRecorderActivity,job.getString("id")) else PcRecorder.delete(this@PcRecorderActivity,job.getString("id")) }
                             .onSuccess { home() }.onFailure { message(it.message ?: "PC recorder is unavailable") }

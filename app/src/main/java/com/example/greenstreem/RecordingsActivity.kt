@@ -34,7 +34,40 @@ class RecordingsActivity : AppCompatActivity() {
     private val casting by lazy { TvCastingController(this) }
     private val selectedRecordingIds=linkedSetOf<String>()
     private var recordingList: ListView?=null
-    private fun canDelete(job: RecordingSchedule.Job) = job.state !in listOf("Scheduled","Recording") && !RecordingService.isRecording(job.id)
+    private data class Row(val local: RecordingSchedule.Job?=null,val remote: org.json.JSONObject?=null) {
+        val id: String get()=local?.id ?: "pc:"+remote!!.getString("id")
+    }
+    private var rows=emptyList<Row>()
+    private var remoteJobs=emptyList<org.json.JSONObject>()
+    private var listAdapter: ArrayAdapter<String>?=null
+    private var refreshJob: kotlinx.coroutines.Job?=null
+    private var remoteStatus: TextView?=null
+    private fun refreshRows() {
+        val list=recordingList ?: return
+        val oldPosition=list.firstVisiblePosition
+        val oldId=rows.getOrNull(oldPosition)?.id
+        val offset=list.getChildAt(0)?.top ?: 0
+        val focusedId=rows.getOrNull(list.selectedItemPosition)?.id
+        rows=(RecordingSchedule.jobs(this).map { Row(local=it) }+remoteJobs.map { Row(remote=it) }).sortedByDescending { it.local?.start ?: it.remote!!.getLong("start") }
+        val labels=rows.map { row -> row.local?.let {
+            (if(it.id in selectedRecordingIds) "Selected: " else "")+"${it.title} · ${it.channel}\n${DateFormat.getDateTimeInstance().format(Date(it.start))} · ${it.state}"+(if(it.weekly) " · Weekly" else "")+" · This device\n${it.detail}"
+        } ?: row.remote!!.let {
+            "${it.getString("title")} · ${it.getString("channel")}\n${DateFormat.getDateTimeInstance().format(Date(it.getLong("start")))} · ${it.getString("state")}"+(if(it.optInt("weekly")==1) " · Weekly" else "")+" · Recorder computer\n${it.optString("detail")}"
+        } }
+        listAdapter?.apply { setNotifyOnChange(false);clear();addAll(labels);notifyDataSetChanged() }
+        if(focusedId!=null && list.hasFocus()) list.setSelection(rows.indexOfFirst { it.id==focusedId }.coerceAtLeast(0))
+        else list.setSelectionFromTop(rows.indexOfFirst { it.id==oldId }.takeIf { it>=0 } ?: oldPosition.coerceAtMost((rows.size-1).coerceAtLeast(0)),offset)
+    }
+    private suspend fun refreshRemote() {
+        if(PcRecorder.connected(this)) runCatching { PcRecorder.jobs(this) }.onSuccess { result ->
+            val array=result.getJSONArray("jobs")
+            remoteJobs=(0 until array.length()).map { array.getJSONObject(it) }
+            remoteStatus?.text="Recorder saves to: ${result.optString("folder")}. Tap a recording below to play or manage it."
+        }.onFailure { remoteStatus?.text="Recorder computer unavailable. Keep it running on the same network. Previously loaded recordings remain listed." }
+        else remoteJobs=emptyList()
+        refreshRows()
+    }
+    private fun canDelete(job: RecordingSchedule.Job) = !job.weekly && job.state !in listOf("Scheduled","Recording") && !RecordingService.isRecording(job.id)
     private fun toggleSelection(job: RecordingSchedule.Job) {
         if(!canDelete(job)) { Toast.makeText(this,"Cancel this recording and wait for it to stop before deleting",Toast.LENGTH_LONG).show(); return }
         if(!selectedRecordingIds.add(job.id)) selectedRecordingIds.remove(job.id)
@@ -52,7 +85,15 @@ class RecordingsActivity : AppCompatActivity() {
             }
         })
         showJobs() }
-    override fun onResume() { super.onResume(); if(player==null) showJobs() }
+    override fun onResume() {
+        super.onResume(); if(player==null) showJobs()
+        refreshJob?.cancel()
+        refreshJob=lifecycleScope.launch { while(true) {
+            if(player==null && selectedRecordingIds.isEmpty()) refreshRemote()
+            kotlinx.coroutines.delay(5000)
+        } }
+    }
+    override fun onPause() { refreshJob?.cancel();super.onPause() }
     private fun showJobs() {
         val previousPosition=recordingList?.firstVisiblePosition ?: 0
         val previousOffset=recordingList?.getChildAt(0)?.top ?: 0
@@ -63,7 +104,7 @@ class RecordingsActivity : AppCompatActivity() {
         val prefs=getSharedPreferences(DownloadPrefs.PREFS_NAME,0)
         val tree=prefs.getString("recording_tree_uri", "").orEmpty()
         root.addView(TextView(this).apply {
-            text=if(PcRecorder.enabled(this@RecordingsActivity)) "New schedules record on your PC. Device recordings are listed below." else if(tree.isBlank()) "Saving to: Network folder" else if(RecordingLocalFolders.direct(tree)) "Saving to: ${RecordingLocalFolders.label(this@RecordingsActivity,tree)}" else "Saving to: Local / USB folder"
+            text=if(PcRecorder.enabled(this@RecordingsActivity)) "New schedules record on your computer. Computer and device recordings are listed together below." else if(tree.isBlank()) "Saving to: Network folder" else if(RecordingLocalFolders.direct(tree)) "Saving to: ${RecordingLocalFolders.label(this@RecordingsActivity,tree)}" else "Saving to: Local / USB folder"
             setTextColor(android.graphics.Color.LTGRAY); textSize=16f; setPadding(0,6,0,18)
         })
         if(!PcRecorder.enabled(this) && !RecordingSchedule.alarmAllowed(this)) root.addView(TextView(this).apply {
@@ -125,22 +166,20 @@ class RecordingsActivity : AppCompatActivity() {
             setOnClickListener { startActivity(Intent(this@RecordingsActivity,PcRecorderActivity::class.java)) }
         },LinearLayout.LayoutParams(-1,-2).apply { topMargin=(8*resources.displayMetrics.density).toInt();bottomMargin=(12*resources.displayMetrics.density).toInt() })
         val list=ListView(this)
-        list.adapter=object: ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,jobs.map {
-            (if(it.id in selectedRecordingIds) "Selected: " else "") + "${it.title} • ${it.channel}\n${DateFormat.getDateTimeInstance().format(Date(it.start))} • ${it.state}\n${it.detail}"
-        }) {
-            override fun getView(position: Int, recycled: android.view.View?, parent: android.view.ViewGroup): android.view.View {
-                return super.getView(position,recycled,parent).apply {
-                    setBackgroundColor(if(jobs[position].id in selectedRecordingIds)
-                        androidx.core.graphics.ColorUtils.blendARGB(AppearanceTheme.accentColor(this@RecordingsActivity),android.graphics.Color.BLACK,0.45f)
-                        else android.graphics.Color.TRANSPARENT)
-                    isSelected=jobs[position].id in selectedRecordingIds
-                }
-            }
+        listAdapter=ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,mutableListOf<String>())
+        list.adapter=listAdapter
+        list.setOnItemClickListener { _,_,position,_ -> rows.getOrNull(position)?.let { row ->
+            if(row.local!=null) { if(selectedRecordingIds.isNotEmpty()) toggleSelection(row.local) else showRecordingActions(row.local) }
+            else remoteActions(row.remote!!)
+        } }
+        list.setOnItemLongClickListener { _,_,position,_ ->
+            rows.getOrNull(position)?.local?.let { toggleSelection(it) }
+                ?: Toast.makeText(this,"Tap a computer recording for play, stop or delete",Toast.LENGTH_SHORT).show()
+            true
         }
-        list.setOnItemClickListener { _,_,position,_ ->
-            if(selectedRecordingIds.isNotEmpty()) toggleSelection(jobs[position]) else showRecordingActions(jobs[position])
-        }
-        list.setOnItemLongClickListener { _,_,position,_ -> toggleSelection(jobs[position]); true }
+        remoteStatus=TextView(this).apply { setTextColor(android.graphics.Color.LTGRAY);setPadding(0,4,0,12)
+            text=if(PcRecorder.connected(this@RecordingsActivity)) "Loading recorder computer..." else "" }
+        root.addView(remoteStatus)
         val empty=TextView(this).apply {
             text="No recordings yet. Hold a program in the TV guide, then choose Schedule recording."
             setTextColor(android.graphics.Color.LTGRAY); textSize=17f; setPadding(8,24,8,24)
@@ -149,7 +188,40 @@ class RecordingsActivity : AppCompatActivity() {
         list.emptyView=empty
         root.addView(list,LinearLayout.LayoutParams(-1,0,1f)); setContentView(root)
         recordingList=list
+        ScreenBack.install(this)
+        refreshRows()
+        lifecycleScope.launch { refreshRemote() }
         list.setSelectionFromTop(previousPosition.coerceAtMost((jobs.size-1).coerceAtLeast(0)),previousOffset)
+    }
+    private fun remoteActions(job: org.json.JSONObject) {
+        val active=job.getString("state") in listOf("Scheduled","Recording")
+        val actions=mutableListOf<String>()
+        if(job.optLong("bytes")>0 && !active) actions.add("Play recording")
+        if(active || job.optInt("weekly")==1) actions.add("Stop / cancel recording")
+        if(!active) actions.add("Delete recording")
+        AlertDialog.Builder(this).setTitle(job.getString("title")).setMessage(job.optString("detail").takeIf { it.isNotBlank() })
+            .setItems(actions.toTypedArray()) { _,index ->
+                if(actions[index]=="Play recording") playRemote(job)
+                else AlertDialog.Builder(this).setTitle(actions[index]+"?")
+                    .setMessage(if(actions[index].startsWith("Stop")) "Stops this recording and future weekly repeats. Saved video is kept." else "Permanently deletes this file from the recorder computer.")
+                    .setNegativeButton("Keep",null).setPositiveButton("Confirm") { _,_ -> lifecycleScope.launch {
+                        runCatching { if(actions[index].startsWith("Stop")) PcRecorder.cancel(this@RecordingsActivity,job.getString("id")) else PcRecorder.delete(this@RecordingsActivity,job.getString("id")) }
+                            .onSuccess { refreshRemote() }.onFailure { Toast.makeText(this@RecordingsActivity,it.message,Toast.LENGTH_LONG).show() }
+                    } }.show()
+            }.show()
+    }
+    private fun playRemote(job: org.json.JSONObject) {
+        val view=PlayerView(this)
+        val http=androidx.media3.datasource.DefaultHttpDataSource.Factory().setDefaultRequestProperties(mapOf("Authorization" to "Bearer ${PcRecorder.token(this)}"))
+        player=ExoPlayer.Builder(this).build().also {
+            view.player=it
+            it.addListener(object: androidx.media3.common.Player.Listener {
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { Toast.makeText(this@RecordingsActivity,"Cannot replay: check the recorder computer and drive",Toast.LENGTH_LONG).show() }
+            })
+            it.setMediaSource(ProgressiveMediaSource.Factory(http).createMediaSource(MediaItem.fromUri("${PcRecorder.address(this)}/v1/jobs/${job.getString("id")}/content")))
+            it.prepare();it.play()
+        }
+        setContentView(view);ScreenBack.install(this)
     }
     private fun chooseBuiltInStorage() {
         lifecycleScope.launch {
@@ -185,7 +257,7 @@ class RecordingsActivity : AppCompatActivity() {
     private fun showRecordingActions(job: RecordingSchedule.Job) {
         val actions=mutableListOf<String>()
         if(job.bytes>0) actions.add("Play recording")
-        if(job.state in listOf("Scheduled","Recording") || RecordingService.isRecording(job.id)) actions.add("Cancel recording")
+        if(job.weekly || job.state in listOf("Scheduled","Recording") || RecordingService.isRecording(job.id)) actions.add("Cancel recording")
         else actions.add("Delete recording")
         actions.add("Details")
         AlertDialog.Builder(this).setTitle(job.title).setItems(actions.toTypedArray()) { _,index ->
@@ -255,7 +327,7 @@ class RecordingsActivity : AppCompatActivity() {
             it.setMediaSource(ProgressiveMediaSource.Factory(factory).createMediaSource(MediaItem.fromUri(if(job.outputUri.isNotBlank()) job.outputUri else "smb://recording/${job.id}.ts")))
             it.prepare(); it.play()
         }
-        setContentView(casting.wrapPlayer(view,{ CastSupport.recording(applicationContext,job).copy(position=CastSupport.position(player)) }) { player?.pause() })
+        setContentView(casting.wrapPlayer(view,{ CastSupport.recording(applicationContext,job).copy(position=CastSupport.position(player)) }) { player?.pause() });ScreenBack.install(this)
     }
     override fun onStop() { player?.release(); player=null; super.onStop() }
 }

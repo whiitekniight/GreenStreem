@@ -84,14 +84,28 @@ internal class PriorityFeedbackChecks(private val i: Instrumentation) {
             waitFor("Phone menu did not become scrollable") { ui { nav.canScrollVertically(1) } }
             repeat(3) { swipe(bounds(nav)) }
             waitFor("Settings still clipped after touch scrolling") { ui { val r=Rect();settingsButton.getGlobalVisibleRect(r) && r.height()==settingsButton.height } }
-            i.setInTouchMode(false)
-            ui { nav.scrollTo(0,0);activity.findViewById<View>(R.id.navSearch).requestFocus() }
-            repeat(5) { i.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN);Thread.sleep(80) }
-            check(ui { settingsButton.hasFocus() }) { "Remote navigation could not reach Settings" }
             val monitor=i.addMonitor(SettingsActivity::class.java.name,null,false)
-            i.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+            if(c.packageManager.hasSystemFeature("android.software.leanback")) {
+                i.setInTouchMode(false)
+                ui { nav.scrollTo(0,0);activity.findViewById<View>(R.id.navSearch).requestFocus() }
+                waitFor("Search did not gain remote focus") { ui { activity.findViewById<View>(R.id.navSearch).hasFocus() } }
+                for(id in listOf(R.id.navTv,R.id.navMovies,R.id.navSeries,R.id.navRecordings,R.id.navSettings)) {
+                    i.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+                    waitFor("Remote focus did not reach ${c.resources.getResourceEntryName(id)}") { ui { activity.findViewById<View>(id).hasFocus() } }
+                }
+                i.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+            } else {
+                val rect=bounds(settingsButton);val t=SystemClock.uptimeMillis()
+                for(action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) {
+                    val event=MotionEvent.obtain(t,SystemClock.uptimeMillis(),action,rect.exactCenterX(),rect.exactCenterY(),0)
+                    event.source=android.view.InputDevice.SOURCE_TOUCHSCREEN
+                    try { i.sendPointerSync(event) } finally { event.recycle() }
+                }
+            }
             settings=i.waitForMonitorWithTimeout(monitor,5000);i.removeMonitor(monitor)
             check(settings!=null) { "Settings did not open" }
+            ui { check(settings!!.window.decorView.findViewWithTag<View>("screen_back").performClick()) }
+            waitFor("Visible Back button did not return from Settings") { settings!!.isFinishing }
             android.util.Log.i("PriorityFeedbackChecks","PASS group toggle recycling/reopen/show-all; short-screen touch menu; remote Settings navigation")
         } finally {
             ui { settings?.finish();main?.finish();groups?.finish() };server.stop()

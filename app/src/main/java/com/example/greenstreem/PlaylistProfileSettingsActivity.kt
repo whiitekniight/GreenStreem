@@ -19,6 +19,7 @@ class PlaylistProfileSettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_playlist_settings)
+        ScreenBack.install(this)
         prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
 
         rvOptions = findViewById(R.id.rvPlaylistOptions)

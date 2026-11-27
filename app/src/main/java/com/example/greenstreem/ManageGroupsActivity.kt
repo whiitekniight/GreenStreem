@@ -28,6 +28,7 @@ class ManageGroupsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         if (!ProFeatureGate.require(this, "Group management is available in GreenStreem Pro.")) return
         setContentView(R.layout.activity_manage_groups)
+        ScreenBack.install(this)
 
         db = AppDatabase.getDatabase(this)
         XtreamManager.initFromPrefs(this)

@@ -76,8 +76,12 @@ internal object PcRecorder {
         } finally { conn.disconnect() }
     }
     suspend fun jobs(c: Context)=withContext(Dispatchers.IO) { request(address(c),"/v1/jobs",token=token(c)) }
-    suspend fun schedule(c: Context,title: String,channel: String,url: String,start: Long,end: Long)=withContext(Dispatchers.IO) {
-        request(address(c),"/v1/jobs","POST",JSONObject().put("id",java.util.UUID.randomUUID().toString()).put("title",title)
+    suspend fun schedule(c: Context,title: String,channel: String,url: String,start: Long,end: Long,weekly: Boolean=false,guideStart: Long=start,guideEnd: Long=end)=withContext(Dispatchers.IO) {
+        if(weekly) {
+            val info=request(address(c),"/v1/info")
+            require(info.optString("version").split('.').take(2).joinToString(".") !in listOf("0.1","0.0","")) { "Update GreenStreem Recorder on your PC to use weekly schedules" }
+        }
+        request(address(c),"/v1/jobs","POST",JSONObject().put("guide_start",guideStart).put("guide_end",guideEnd).put("weekly",weekly).put("zone",java.util.TimeZone.getDefault().id).put("id",java.util.UUID.randomUUID().toString()).put("title",title)
             .put("channel",channel).put("url",url).put("start",start).put("end",end),token(c))
     }
     suspend fun cancel(c: Context,id: String)=withContext(Dispatchers.IO) { request(address(c),"/v1/jobs/$id/cancel","POST",JSONObject(),token(c)) }

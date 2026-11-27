@@ -68,6 +68,7 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
         setContentView(R.layout.activity_settings)
+        ScreenBack.install(this)
 
         tvDetailTitle = findViewById(R.id.tvSettingDetailTitle)
         tvDetailDesc = findViewById(R.id.tvSettingDetailDesc)

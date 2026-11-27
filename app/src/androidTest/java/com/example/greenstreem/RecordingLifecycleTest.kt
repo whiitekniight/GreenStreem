@@ -4,15 +4,17 @@ package com.example.greenstreem
 class RecordingLifecycleTest : android.app.Instrumentation() {
     private var nativeCastTarget: String?=null
     private var guideUi=false
+    private var improvementsUi=false
     private var priorityUi=false
     private var permissionUi=false
     private var storageProbe=false
     private var fallbackUi=false
-    override fun onCreate(arguments: android.os.Bundle?) { priorityUi=arguments?.getString("priorityUi")=="true";guideUi=arguments?.getString("guideUi")=="true"; nativeCastTarget=arguments?.getString("nativeCastTarget"); permissionUi=arguments?.getString("permissionUi")=="true";storageProbe=arguments?.getString("storageProbe")=="true";fallbackUi=arguments?.getString("fallbackUi")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments: android.os.Bundle?) { improvementsUi=arguments?.getString("improvementsUi")=="true"; priorityUi=arguments?.getString("priorityUi")=="true";guideUi=arguments?.getString("guideUi")=="true"; nativeCastTarget=arguments?.getString("nativeCastTarget"); permissionUi=arguments?.getString("permissionUi")=="true";storageProbe=arguments?.getString("storageProbe")=="true";fallbackUi=arguments?.getString("fallbackUi")=="true"; super.onCreate(arguments); start() }
     override fun onStart() {
         val result=android.os.Bundle()
         try {
-            if(priorityUi) { PriorityFeedbackChecks(this).run() }
+            if(improvementsUi) { RecordingImprovementsChecks(this).run() }
+            else if(priorityUi) { PriorityFeedbackChecks(this).run() }
             else if(guideUi) { GuideFeedbackChecks(this,nativeCastTarget).run() }
             else if(storageProbe) {
                 val targets=RecordingLocalFolders.available(targetContext)

@@ -11,6 +11,7 @@ class TvSettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_playlist_settings)
+        ScreenBack.install(this)
 
         val rvOptions = findViewById<RecyclerView>(R.id.rvPlaylistOptions)
         rvOptions.layoutManager = LinearLayoutManager(this)

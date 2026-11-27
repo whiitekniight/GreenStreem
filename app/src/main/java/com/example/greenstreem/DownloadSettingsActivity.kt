@@ -81,6 +81,7 @@ class DownloadSettingsActivity : AppCompatActivity() {
             )
         )
         setContentView(root)
+        ScreenBack.install(this)
 
         adapter = DownloadSettingsAdapter { row ->
             when (row.id) {

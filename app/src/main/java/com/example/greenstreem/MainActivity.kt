@@ -662,6 +662,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onPause() {
+        recordingMarkerHandler.removeCallbacks(recordingMarkerTick)
         remoteBackHandler.removeCallbacks(remoteBackExit)
         remoteBackHeld = false
         if (suppressExitOnUserLeaveHint) {
@@ -682,6 +683,9 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshRecordingMarkers()
+        recordingMarkerHandler.removeCallbacks(recordingMarkerTick)
+        recordingMarkerHandler.postDelayed(recordingMarkerTick,15000)
         restoreVolumeAfterInternalActivity()
         suppressExitOnUserLeaveHint = false
         PlayBillingManager.refreshPurchases()
@@ -870,75 +874,108 @@ class MainActivity : FragmentActivity() {
 
     private fun showRecordingOptions(channel: Channel, listing: XtreamEpgListing?) {
         if(!ProEntitlement.isProUnlocked(this)) { showChannelOptions(channel); return }
-        AlertDialog.Builder(this).setTitle(listing?.let { DataUtils.decodeBase64(it.title) } ?: channel.name)
-            .setItems(arrayOf("Schedule recording", "Recordings", "Channel options")) { _, index ->
-                when(index) {
-                    1 -> launchInternalActivity(Intent(this, RecordingsActivity::class.java))
-                    2 -> showChannelOptions(channel)
-                    else -> {
-                        if(listing == null) { Toast.makeText(this, "Hold OK on a program with guide times", Toast.LENGTH_LONG).show(); return@setItems }
-                        if(PcRecorder.enabled(this)) {
-                            showPcRecordingOptions(channel,listing)
-                            return@setItems
-                        }
-                        if(!RecordingSchedule.alarmAllowed(this)) {
-                            AlertDialog.Builder(this)
-                                .setTitle("Allow scheduled recordings")
-                                .setMessage("Android needs Alarms & reminders access so GreenStreem can start your recording on time. Enable it on the next screen, then return here to schedule this program. Your chosen storage folder is already saved.")
-                                .setPositiveButton("Enable scheduling") { _, _ ->
-                                    pendingRecordingPermission = channel to listing
-                                    suppressExitOnUserLeaveHint = true
-                                    muteForInternalActivity()
-                                    postInternalActivityMutePasses()
-                                    runCatching {
-                                        recordingPermissionLauncher.launch(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
-                                    }.onFailure {
-                                        pendingRecordingPermission = null
-                                        suppressExitOnUserLeaveHint = false
-                                        Toast.makeText(this,"Enable GreenStreem in Android Settings: Special app access, Alarms & reminders",Toast.LENGTH_LONG).show()
-                                    }
-                                }.setNegativeButton("Not now",null).show()
-                            return@setItems
-                        }
-                        val title = DataUtils.decodeBase64(listing.title)
-                        AlertDialog.Builder(this).setTitle("Record $title?")
-                            .setMessage("Saves to the recording folder selected in Recordings (network, local, or USB). Keep this device powered and connected. Watching another channel may require another provider connection. Android 15+ limits background recording to six hours per day. Force-stop prevents recording until you reopen GreenStreem.")
-                            .setPositiveButton("Schedule") { _, _ ->
-                                runCatching {
-                                    val url = if(isM3uPlaylist()) channel.streamUrl else buildLiveStreamUrl(channel.id, LIVE_STREAM_FORMAT_TS)
-                                    RecordingSchedule.add(this,title,channel.name,url,listing.startTimestamp*1000,listing.stopTimestamp*1000)
-                                }.onSuccess { Toast.makeText(this,"Recording scheduled",Toast.LENGTH_LONG).show() }
-                                    .onFailure { Toast.makeText(this,it.message ?: "Could not schedule",Toast.LENGTH_LONG).show() }
-                            }.setNeutralButton("30-second test") { _, _ ->
-                                runCatching {
-                                    val url = if(isM3uPlaylist()) channel.streamUrl else buildLiveStreamUrl(channel.id, LIVE_STREAM_FORMAT_TS)
-                                    val start = System.currentTimeMillis() + 10000L
-                                    RecordingSchedule.add(this,"Test - $title",channel.name,url,start,start+30000L)
-                                }.onSuccess { Toast.makeText(this,"Test starts in 10 seconds; you can leave the app",Toast.LENGTH_LONG).show() }
-                                    .onFailure { Toast.makeText(this,it.message ?: "Could not schedule test",Toast.LENGTH_LONG).show() }
-                            }.setNegativeButton("Cancel",null).show()
+        lifecycleScope.launch {
+            val remote=if(PcRecorder.enabled(this@MainActivity)) runCatching { PcRecorder.jobs(this@MainActivity).getJSONArray("jobs") }.getOrNull() else null
+            val now=System.currentTimeMillis()
+            val local=RecordingSchedule.jobs(this@MainActivity).filter { it.channel==channel.name && it.state in listOf("Scheduled","Recording") &&
+                (it.state=="Recording" || listing!=null && it.start<listing.stopTimestamp*1000 && it.end>listing.startTimestamp*1000) }
+            val remoteJobs=remote?.let { array -> (0 until array.length()).map { array.getJSONObject(it) }.filter {
+                it.optString("channel")==channel.name && it.optString("state") in listOf("Scheduled","Recording") &&
+                (it.optString("state")=="Recording" || listing!=null && it.optLong("start")<listing.stopTimestamp*1000 && it.optLong("end")>listing.startTimestamp*1000)
+            } }.orEmpty()
+            val actions=mutableListOf("Record now", "Schedule recording")
+            if(local.isNotEmpty() || remoteJobs.isNotEmpty()) actions.add("Stop / cancel recording")
+            actions.addAll(listOf("Recordings", "Channel options"))
+            AlertDialog.Builder(this@MainActivity).setTitle(listing?.let { DataUtils.decodeBase64(it.title) } ?: channel.name)
+                .setItems(actions.toTypedArray()) { _, index -> when(actions[index]) {
+                    "Record now" -> recordingDialog(channel,listing,true)
+                    "Schedule recording" -> {
+                        if(listing==null) Toast.makeText(this@MainActivity,"Choose a program with guide times",Toast.LENGTH_LONG).show()
+                        else recordingDialog(channel,listing,false)
                     }
-                }
-            }.show()
+                    "Recordings" -> launchInternalActivity(Intent(this@MainActivity,RecordingsActivity::class.java))
+                    "Channel options" -> showChannelOptions(channel)
+                    else -> AlertDialog.Builder(this@MainActivity).setTitle("Stop / cancel recording?")
+                        .setMessage("Stops this channel's matching recording and its weekly repeats. Saved video is kept.")
+                        .setNegativeButton("Keep",null).setPositiveButton("Stop") { _,_ -> lifecycleScope.launch {
+                            runCatching {
+                                local.forEach { RecordingSchedule.cancel(this@MainActivity,it) }
+                                remoteJobs.forEach { PcRecorder.cancel(this@MainActivity,it.getString("id")) }
+                            }.onSuccess { refreshRecordingMarkers();Toast.makeText(this@MainActivity,"Recording stopped / cancelled",Toast.LENGTH_SHORT).show() }
+                                .onFailure { Toast.makeText(this@MainActivity,it.message,Toast.LENGTH_LONG).show() }
+                        } }.show()
+                } }.show()
+        }
     }
 
-    private fun showPcRecordingOptions(channel: Channel, listing: XtreamEpgListing) {
-        val title=DataUtils.decodeBase64(listing.title)
-        fun schedule(test: Boolean) {
-            val url=if(isM3uPlaylist()) channel.streamUrl else buildLiveStreamUrl(channel.id,LIVE_STREAM_FORMAT_TS)
-            val start=if(test) System.currentTimeMillis()+10000L else listing.startTimestamp*1000
-            val end=if(test) start+30000L else listing.stopTimestamp*1000
-            lifecycleScope.launch {
-                runCatching { PcRecorder.schedule(this@MainActivity,if(test) "Test - $title" else title,channel.name,url,start,end) }
-                    .onSuccess { Toast.makeText(this@MainActivity,"PC confirmed the schedule. This device can now be off.",Toast.LENGTH_LONG).show() }
-                    .onFailure { Toast.makeText(this@MainActivity,"Could not confirm the schedule. Check PC Recordings before trying again. ${it.message.orEmpty()}",Toast.LENGTH_LONG).show() }
+    private fun recordingDialog(channel: Channel, listing: XtreamEpgListing?, immediate: Boolean) {
+        if(!PcRecorder.enabled(this) && !RecordingSchedule.alarmAllowed(this)) {
+            AlertDialog.Builder(this).setTitle("Allow scheduled recordings")
+                .setMessage("Enable Alarms & reminders, then return to this program. Your recording folder is already saved.")
+                .setNegativeButton("Cancel",null).setPositiveButton("Enable scheduling") { _,_ ->
+                    pendingRecordingPermission=channel to listing
+                    suppressExitOnUserLeaveHint=true;muteForInternalActivity();postInternalActivityMutePasses()
+                    runCatching { recordingPermissionLauncher.launch(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:$packageName"))) }
+                        .onFailure { Toast.makeText(this,"Open Android Settings to allow Alarms & reminders",Toast.LENGTH_LONG).show() }
+                }.show()
+            return
+        }
+        val title=listing?.let { DataUtils.decodeBase64(it.title) } ?: channel.name
+        val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(28,8,28,8) }
+        root.addView(TextView(this).apply {
+            text=if(PcRecorder.enabled(this@MainActivity)) "The recorder computer must stay on. This device can be off after confirmation."
+            else "Keep this device on and connected. Recording stops automatically at the end time. Android can limit long background recordings; use a recorder computer for recording while this device is off."
+        })
+        val minutes=listOf(0,1,2,3,5,10,15,30)
+        fun padding(label: String): android.widget.Spinner {
+            root.addView(TextView(this).apply { text=label;setPadding(0,16,0,4) })
+            return android.widget.Spinner(this).also { spinner ->
+                spinner.adapter=android.widget.ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,minutes.map { "$it minutes" })
+                spinner.setSelection(3);root.addView(spinner)
             }
         }
-        AlertDialog.Builder(this).setTitle("Record $title on PC?")
-            .setMessage("The PC saves to its selected recording folder. Keep the PC on, signed in, the recorder running and its drive connected. This device can be off after confirmation. A recording uses one provider connection.")
-            .setPositiveButton("Schedule") { _,_ -> schedule(false) }
-            .setNeutralButton("30-second test") { _,_ -> schedule(true) }
-            .setNegativeButton("Cancel",null).show()
+        val before=if(!immediate) padding("Start early") else null
+        val after=padding("Finish late")
+        val weekly=android.widget.CheckBox(this).apply { text="Repeat weekly · same day and local time";visibility=if(immediate) View.GONE else View.VISIBLE }
+        root.addView(weekly)
+        root.addView(TextView(this).apply { text="Weekly repeats use this channel and time slot, even if the guide title changes. One recording at a time.";setPadding(0,8,0,8) })
+        fun submit(test: Boolean) {
+            val now=System.currentTimeMillis()
+            val start=if(test) now+10000L else if(immediate) now else (listing!!.startTimestamp*1000)-minutes[before!!.selectedItemPosition]*60000L
+            val end=if(test) start+30000L else (listing?.stopTimestamp?.times(1000)?.takeIf { it>now } ?: (now+3600000L))+minutes[after.selectedItemPosition]*60000L
+            val url=if(isM3uPlaylist()) channel.streamUrl else buildLiveStreamUrl(channel.id,LIVE_STREAM_FORMAT_TS)
+            lifecycleScope.launch {
+                runCatching {
+                    if(PcRecorder.enabled(this@MainActivity)) PcRecorder.schedule(this@MainActivity,if(test) "Test - $title" else title,channel.name,url,start,end,!test && !immediate && weekly.isChecked,if(!test && !immediate) listing!!.startTimestamp*1000 else start,if(!test && !immediate) listing!!.stopTimestamp*1000 else end)
+                    else RecordingSchedule.add(this@MainActivity,if(test) "Test - $title" else title,channel.name,url,start,end,!test && !immediate && weekly.isChecked,if(!test && !immediate) listing!!.startTimestamp*1000 else start,if(!test && !immediate) listing!!.stopTimestamp*1000 else end)
+                }.onSuccess {
+                    refreshRecordingMarkers()
+                    Toast.makeText(this@MainActivity,if(PcRecorder.enabled(this@MainActivity)) "Recorder confirmed. This device can now be off." else if(test) "Test starts in 10 seconds" else "Recording scheduled",Toast.LENGTH_LONG).show()
+                }.onFailure { Toast.makeText(this@MainActivity,it.message ?: "Could not schedule recording",Toast.LENGTH_LONG).show() }
+            }
+        }
+        AlertDialog.Builder(this).setTitle(if(immediate) "Record $title now?" else "Schedule $title")
+            .setView(android.widget.ScrollView(this).apply { addView(root) })
+            .setPositiveButton(if(immediate) "Record now" else "Schedule") { _,_ -> submit(false) }
+            .setNeutralButton("30-second test") { _,_ -> submit(true) }.setNegativeButton("Cancel",null).show()
+    }
+
+    private val recordingMarkerHandler=Handler(Looper.getMainLooper())
+    private val recordingMarkerTick=object: Runnable {
+        override fun run() { refreshRecordingMarkers();recordingMarkerHandler.postDelayed(this,15000) }
+    }
+    private fun refreshRecordingMarkers() {
+        if(!::epgAdapter.isInitialized) return
+        lifecycleScope.launch {
+            val marks=RecordingSchedule.jobs(this@MainActivity).filter { it.state in listOf("Scheduled","Recording") }
+                .map { RecordingMarker(it.channel,it.guideStart,it.guideEnd,it.state=="Recording") }.toMutableList()
+            if(PcRecorder.connected(this@MainActivity)) runCatching { PcRecorder.jobs(this@MainActivity).getJSONArray("jobs") }.onSuccess { array ->
+                for(n in 0 until array.length()) array.getJSONObject(n).let { job ->
+                    if(job.optString("state") in listOf("Scheduled","Recording")) marks.add(RecordingMarker(job.optString("channel"),job.optLong("guide_start").takeIf { it>0 } ?: job.getLong("start"),job.optLong("guide_end").takeIf { it>0 } ?: job.getLong("end"),job.optString("state")=="Recording"))
+                }
+            }
+            epgAdapter.setRecordingMarkers(marks)
+        }
     }
 
     private fun showChannelOptions(channel: Channel) {

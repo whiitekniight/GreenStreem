@@ -32,6 +32,7 @@ class GroupSortingActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         if (!ProFeatureGate.require(this, "Group sorting is available in GreenStreem Pro.")) return
         setContentView(R.layout.activity_manage_groups)
+        ScreenBack.install(this)
 
         // Set screen title and hide bulk action buttons
         findViewById<TextView>(R.id.tvTitle)?.text = "Sort Groups"

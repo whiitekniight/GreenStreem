@@ -59,6 +59,7 @@ class PlaybackSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         if (!ProFeatureGate.require(this, "Playback settings are available in GreenStreem Pro.")) return
         setContentView(R.layout.activity_playlist_settings)
+        ScreenBack.install(this)
 
         prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
         findViewById<TextView>(R.id.tvPlaylistSettingsTitle)?.text = "Playback Settings"

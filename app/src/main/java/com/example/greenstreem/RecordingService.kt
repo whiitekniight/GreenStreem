@@ -24,7 +24,13 @@ class RecordingService : Service() {
             else if(active==null) stopSelf()
             return START_NOT_STICKY
         }
-        if(active!=null) return START_NOT_STICKY
+        if(active!=null) {
+            if(active!=id) RecordingSchedule.jobs(this).find { it.id==id }?.let { overlapping ->
+                RecordingSchedule.save(this,overlapping.copy(state="Failed",detail="Another recording was already running"))
+                RecordingSchedule.advanceWeekly(this,overlapping)
+            }
+            return START_NOT_STICKY
+        }
         val job = RecordingSchedule.jobs(this).find { it.id==id && it.state in listOf("Scheduled","Recording") } ?: run { stopSelf(); return START_NOT_STICKY }
         val manager = getSystemService(NotificationManager::class.java)
         if(Build.VERSION.SDK_INT>=26) manager.createNotificationChannel(NotificationChannel("recording","Scheduled recordings",NotificationManager.IMPORTANCE_LOW))
@@ -90,6 +96,7 @@ class RecordingService : Service() {
         val complete=error==null && System.currentTimeMillis()>=job.end && bytes>0
         RecordingSchedule.save(this,job.copy(bytes=bytes,state=when {cancelled -> "Cancelled";complete -> "Completed";bytes>0 -> "Partial";else -> "Failed"},
             detail=if(cancelled) "Stopped by user" else if(complete) "" else "Recording interrupted: check stream and recording storage"))
+        if(!cancelled) RecordingSchedule.advanceWeekly(this,job)
     }
     override fun onTimeout(startId: Int, fgsType: Int) { stopped.set(true); connection?.disconnect(); stopSelf() }
     override fun onDestroy() { stopped.set(true); connection?.disconnect(); executor.shutdownNow(); super.onDestroy() }

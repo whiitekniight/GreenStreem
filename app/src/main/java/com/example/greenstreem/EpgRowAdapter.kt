@@ -17,6 +17,8 @@ import java.util.Calendar
 import kotlin.math.max
 import kotlin.math.min
 
+data class RecordingMarker(val channel: String,val start: Long,val end: Long,val active: Boolean)
+
 class EpgRowAdapter(
     private val pxPerMinute: Int,
     private val sync: ScrollSync,
@@ -26,6 +28,12 @@ class EpgRowAdapter(
     private val onVisibilityToggleClick: (Channel) -> Unit
 ) : RecyclerView.Adapter<EpgRowAdapter.VH>() {
 
+    private var recordingMarkers: List<RecordingMarker> = emptyList()
+    fun setRecordingMarkers(value: List<RecordingMarker>) {
+        if(recordingMarkers==value) return
+        recordingMarkers=value
+        notifyItemRangeChanged(0,itemCount,"RECORDINGS")
+    }
     private var channels: List<Channel> = emptyList()
     private val channelPrograms = mutableMapOf<Int, List<XtreamEpgListing>>()
     private val deferredFocusedRowUpdates = mutableSetOf<Int>()
@@ -199,7 +207,16 @@ class EpgRowAdapter(
     }
 
     override fun onBindViewHolder(holder: VH, position: Int, payloads: MutableList<Any>) {
-        if (payloads.contains("EPG_WINDOW")) {
+        if(payloads.contains("RECORDINGS")) {
+            val channel=channels.getOrNull(position)
+            if(channel!=null && holder.boundChannelId==channel.id) {
+                for(index in 0 until holder.container.childCount) {
+                    val view=holder.container.getChildAt(index)
+                    val binding=view.tag as? Pair<*,*> ?: continue
+                    bindRecordingMarker(view,view.findViewById(R.id.tvProgramTitle),binding.first as String,channel,binding.second as? XtreamEpgListing)
+                }
+            }
+        } else if (payloads.contains("EPG_WINDOW")) {
             bindInternal(holder, position, false)
         } else if (payloads.contains("EPG_UPDATE") || payloads.contains("EPG_CLOCK")) {
             updateProgramBlocks(holder, position, true)
@@ -463,6 +480,14 @@ class EpgRowAdapter(
         return false
     }
 
+    private fun bindRecordingMarker(view: View,tvTitle: TextView,title: String,channel: Channel,listing: XtreamEpgListing?) {
+        val marker=listing?.let { program -> recordingMarkers.firstOrNull { it.channel==channel.name && it.start<program.stopTimestamp*1000 && it.end>program.startTimestamp*1000 } }
+        tvTitle.text = if(marker==null) title else android.text.SpannableString("\u25cf $title").apply {
+            setSpan(android.text.style.ForegroundColorSpan(Color.rgb(255,76,76)),0,1,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        view.contentDescription=title + if(marker==null) "" else if(marker.active) ", recording" else ", recording scheduled"
+    }
+
     private fun bindProgramBlock(inflater: LayoutInflater, container: LinearLayout, index: Int, title: String, durationSec: Long, channel: Channel, listing: XtreamEpgListing?) {
         // Reuse the row's cards as RecyclerView rebinds channels instead of
         // inflating the entire four-hour guide again on each vertical step.
@@ -474,7 +499,8 @@ class EpgRowAdapter(
         view.elevation = if (view.isFocused) 6f else 0f
         applyProgramFocusStyle(view, false)
         val tvTitle = view.findViewById<TextView>(R.id.tvProgramTitle)
-        tvTitle.text = title
+        view.tag=title to listing
+        bindRecordingMarker(view,tvTitle,title,channel,listing)
         tvTitle.setTextColor(Color.WHITE)
         tvTitle.setTypeface(null, android.graphics.Typeface.NORMAL)
 
